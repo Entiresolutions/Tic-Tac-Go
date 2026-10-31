@@ -107,11 +107,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               )
             : Consumer<ThemeProvider>(
                 builder: (context, themeProvider, child) {
-                  final isDarkMode = themeProvider.isDarkMode;
+                  // final isDarkMode = themeProvider.isDarkMode;
 
                   return ListView(
                     padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
                     children: [
+                      /*
                       // 🎨 Appearance Section
                       _buildSection(
                         title: 'Appearance',
@@ -125,6 +126,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ],
                       ),
                       const SizedBox(height: 24),
+                      */
 
                       // 🔊 Audio & Feedback Section
                       _buildSection(
@@ -196,25 +198,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           _buildInfoTile(
                             icon: Icons.grid_4x4_rounded,
                             title: 'Board Format',
-                            value: '7 × 7 Grid',
+                            value: '3×3 to 8×8 Grids',
                           ),
                           Divider(color: AppColors.border, height: 1),
                           _buildInfoTile(
                             icon: Icons.emoji_events_rounded,
                             title: 'Win Condition',
-                            value: '5 in a row',
+                            value: '3 to 8 in a row',
+                          ),
+                          Divider(color: AppColors.border, height: 1),
+                          _buildInfoTile(
+                            icon: Icons.military_tech_rounded,
+                            title: 'Strategic Levels',
+                            value: '6 Levels (Beginner – Master)',
+                          ),
+                          Divider(color: AppColors.border, height: 1),
+                          _buildInfoTile(
+                            icon: Icons.timer_rounded,
+                            title: 'Turn Timer',
+                            value: '30 Seconds per Turn',
                           ),
                           Divider(color: AppColors.border, height: 1),
                           _buildInfoTile(
                             icon: Icons.offline_bolt_rounded,
                             title: 'Game Storage',
-                            value: 'Local & Offline',
+                            value: '100% Offline & Local',
                           ),
                           Divider(color: AppColors.border, height: 1),
                           _buildInfoTile(
                             icon: Icons.info_outline_rounded,
                             title: 'Version',
-                            value: '1.0.0',
+                            value: '1.0.0+1',
                           ),
                         ],
                       ),
@@ -268,6 +282,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  /*
   Widget _buildThemeSwitchTile({
     required bool isDarkMode,
     required ValueChanged<bool> onChanged,
@@ -369,6 +384,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
+  */
 
   Widget _buildSwitchTile({
     required IconData icon,

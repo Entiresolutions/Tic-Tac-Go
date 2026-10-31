@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 
 /// Interactive game cell with dynamic symbol font scaling, 3D flip, win glow,
-/// and last-move pulsing marker.
+/// hint pulse indicator, and last-move pulsing marker.
 class CaroCell extends StatefulWidget {
   final int x;
   final int y;
@@ -11,6 +11,7 @@ class CaroCell extends StatefulWidget {
   final VoidCallback onTap;
   final bool isWinningCell;
   final bool isLastMove;
+  final bool isHintCell;
   final double cellSize;
 
   const CaroCell({
@@ -21,6 +22,7 @@ class CaroCell extends StatefulWidget {
     required this.onTap,
     this.isWinningCell = false,
     this.isLastMove = false,
+    this.isHintCell = false,
     this.cellSize = 48.0,
   });
 
@@ -53,13 +55,13 @@ class _CaroCellState extends State<CaroCell> with TickerProviderStateMixin {
 
     _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 1000),
     );
-    _pulseAnimation = Tween<double>(begin: 0.94, end: 1.06).animate(
+    _pulseAnimation = Tween<double>(begin: 0.92, end: 1.08).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    if (widget.isWinningCell) {
+    if (widget.isWinningCell || widget.isHintCell) {
       _pulseController.repeat(reverse: true);
     }
 
@@ -79,8 +81,10 @@ class _CaroCellState extends State<CaroCell> with TickerProviderStateMixin {
         _flipController.value = 0.0;
       }
     }
-    if (widget.isWinningCell != oldWidget.isWinningCell) {
-      if (widget.isWinningCell) {
+    final needsPulse = widget.isWinningCell || widget.isHintCell;
+    final hadPulse = oldWidget.isWinningCell || oldWidget.isHintCell;
+    if (needsPulse != hadPulse) {
+      if (needsPulse) {
         _pulseController.repeat(reverse: true);
       } else {
         _pulseController.stop();
@@ -100,6 +104,7 @@ class _CaroCellState extends State<CaroCell> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final bool isX = widget.value == 'X';
     final Color symbolColor = isX ? AppColors.xPrimary : AppColors.oPrimary;
+    final bool isHint = widget.isHintCell && widget.value.isEmpty;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -109,29 +114,33 @@ class _CaroCellState extends State<CaroCell> with TickerProviderStateMixin {
         child: AnimatedBuilder(
           animation: Listenable.merge([_flipAnimation, _pulseAnimation]),
           builder: (context, child) {
-            final double winScale =
-                widget.isWinningCell ? _pulseAnimation.value : 1.0;
+            final double cellScale =
+                (widget.isWinningCell || isHint) ? _pulseAnimation.value : 1.0;
 
             return Transform.scale(
-              scale: winScale,
+              scale: cellScale,
               child: Container(
                 margin: const EdgeInsets.all(2.5),
                 decoration: BoxDecoration(
                   color: widget.isWinningCell
                       ? symbolColor.withValues(alpha: 0.14)
-                      : (_isHovered && widget.value.isEmpty
-                          ? AppColors.cellHover
-                          : AppColors.cellBackground),
+                      : (isHint
+                          ? AppColors.winHighlight.withValues(alpha: 0.20)
+                          : (_isHovered && widget.value.isEmpty
+                              ? AppColors.cellHover
+                              : AppColors.cellBackground)),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: widget.isWinningCell
                         ? symbolColor
-                        : (widget.isLastMove
-                            ? AppColors.lastMoveMarker
-                            : (_isHovered
-                                ? AppColors.primaryLight
-                                : AppColors.boardBorder)),
-                    width: widget.isWinningCell
+                        : (isHint
+                            ? AppColors.winHighlight
+                            : (widget.isLastMove
+                                ? AppColors.lastMoveMarker
+                                : (_isHovered
+                                    ? AppColors.primaryLight
+                                    : AppColors.boardBorder))),
+                    width: (widget.isWinningCell || isHint)
                         ? 2.2
                         : (widget.isLastMove ? 2.0 : 1.2),
                   ),
@@ -141,6 +150,12 @@ class _CaroCellState extends State<CaroCell> with TickerProviderStateMixin {
                         color: symbolColor.withValues(alpha: 0.35),
                         blurRadius: 10,
                         spreadRadius: 1,
+                      )
+                    else if (isHint)
+                      BoxShadow(
+                        color: AppColors.winHighlight.withValues(alpha: 0.45),
+                        blurRadius: 12,
+                        spreadRadius: 2,
                       )
                     else if (widget.isLastMove)
                       BoxShadow(
@@ -159,6 +174,14 @@ class _CaroCellState extends State<CaroCell> with TickerProviderStateMixin {
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
+                    // Hint indicator when empty
+                    if (isHint)
+                      Icon(
+                        Icons.lightbulb_rounded,
+                        color: AppColors.winHighlight,
+                        size: (widget.cellSize * 0.42).clamp(14.0, 32.0),
+                      ),
+
                     // Last move small indicator ring in corner
                     if (widget.isLastMove && widget.value.isNotEmpty)
                       Positioned(
@@ -198,46 +221,42 @@ class _CaroCellState extends State<CaroCell> with TickerProviderStateMixin {
       animation: _flipAnimation,
       builder: (context, child) {
         final angle = _flipAnimation.value * math.pi;
-        final transform = Matrix4.identity()
-          ..setEntry(3, 2, 0.001)
-          ..rotateY(angle);
+        final bool showFront = _flipAnimation.value >= 0.5;
 
-        final isBackVisible = angle > math.pi / 2;
+        // Auto-scale font based on dynamic cell dimensions
+        final double symbolFontSize = (widget.cellSize * 0.56).clamp(16.0, 48.0);
 
         return Transform(
-          transform: transform,
+          transform: Matrix4.identity()
+            ..setEntry(3, 2, 0.002)
+            ..rotateY(angle),
           alignment: Alignment.center,
-          child: isBackVisible
+          child: showFront
               ? Transform(
                   transform: Matrix4.identity()..rotateY(math.pi),
                   alignment: Alignment.center,
-                  child: _buildSymbolText(symbolColor),
+                  child: Center(
+                    child: Text(
+                      widget.value,
+                      style: TextStyle(
+                        fontFamily: 'Roboto',
+                        fontSize: symbolFontSize,
+                        fontWeight: FontWeight.w900,
+                        color: symbolColor,
+                        shadows: [
+                          Shadow(
+                            color: symbolColor.withValues(alpha: 0.4),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 )
               : const SizedBox.shrink(),
         );
       },
-    );
-  }
-
-  Widget _buildSymbolText(Color symbolColor) {
-    // Responsive font scaling derived from cell size (approx 54% of cell size)
-    final double fontSize = (widget.cellSize * 0.54).clamp(16.0, 36.0);
-
-    return Text(
-      widget.value,
-      textAlign: TextAlign.center,
-      style: TextStyle(
-        color: symbolColor,
-        fontWeight: FontWeight.w900,
-        fontSize: fontSize,
-        shadows: [
-          Shadow(
-            color: symbolColor.withValues(alpha: 0.35),
-            blurRadius: 4,
-            offset: const Offset(1, 1),
-          ),
-        ],
-      ),
     );
   }
 }

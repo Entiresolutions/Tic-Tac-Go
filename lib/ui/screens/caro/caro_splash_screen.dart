@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../services/audio_service.dart';
 import '../../../services/local_storage_service.dart';
 import 'caro_home_screen.dart';
 
@@ -34,6 +35,9 @@ class _CaroSplashScreenState extends State<CaroSplashScreen>
   @override
   void initState() {
     super.initState();
+
+    // Start background music looping from splash
+    AudioService.instance.startBgm();
 
     // 5-second splash duration
     _animController = AnimationController(

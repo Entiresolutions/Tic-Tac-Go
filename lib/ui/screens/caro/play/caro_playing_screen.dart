@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../game/caro/caro_controller.dart';
 import '../../../../game/caro/caro_board.dart';
+import '../../../../game/caro/game_config.dart';
 import '../../../../services/audio_service.dart';
 import '../../../../services/haptic_service.dart';
 import '../../../widgets/bouncing_game_button.dart';
@@ -54,7 +56,11 @@ class _CaroScreenState extends State<CaroScreen> {
 
       // Haptic celebration / alert
       if (_controller!.winnerId == _controller!.myUserId) {
-        HapticService.instance.heavyImpact();
+        if (_controller!.isMasterBeaten) {
+          HapticService.instance.winningStreak();
+        } else {
+          HapticService.instance.heavyImpact();
+        }
       } else if (_controller!.winnerId != null) {
         HapticService.instance.mediumImpact();
       } else {
@@ -73,6 +79,13 @@ class _CaroScreenState extends State<CaroScreen> {
             Navigator.of(context).pop();
             _hasShownEndDialog = false;
             _controller!.resetGame();
+          },
+          onNextLevel: (nextLevel) {
+            HapticService.instance.heavyImpact();
+            AudioService.instance.playButtonClick();
+            Navigator.of(context).pop();
+            _hasShownEndDialog = false;
+            _navigateToLevel(nextLevel);
           },
           onGoHome: () {
             HapticService.instance.lightImpact();
@@ -97,6 +110,45 @@ class _CaroScreenState extends State<CaroScreen> {
     }
   }
 
+  void _navigateToLevel(GameLevel nextLevel) {
+    if (!mounted) return;
+
+    final oldMyWins = _controller?.myWins ?? 0;
+    final oldOpponentWins = _controller?.opponentWins ?? 0;
+    final oldDraws = _controller?.draws ?? 0;
+    final oldMyRating = _controller?.myRating;
+    final oldOpponentRating = _controller?.opponentRating;
+    final oldIsOffline = _controller?.isOffline ?? true;
+    final oldIsVsBot = _controller?.isVsBot ?? true;
+
+    _controller?.removeListener(_checkGameEnd);
+    _controller?.disconnect();
+
+    final newMatchId = DateTime.now().millisecondsSinceEpoch;
+
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => ChangeNotifierProvider(
+          create: (_) {
+            final newController = CaroController(
+              level: nextLevel,
+              matchId: newMatchId,
+              isOffline: oldIsOffline,
+              isVsBot: oldIsVsBot,
+              initialMyRating: oldMyRating,
+              initialOpponentRating: oldOpponentRating,
+            );
+            newController.myWins = oldMyWins;
+            newController.opponentWins = oldOpponentWins;
+            newController.draws = oldDraws;
+            return newController;
+          },
+          child: const CaroScreen(),
+        ),
+      ),
+    );
+  }
+
   void _navigateToNewMatch(int newMatchId) {
     if (!mounted) return;
 
@@ -107,6 +159,8 @@ class _CaroScreenState extends State<CaroScreen> {
     final oldOpponentRating = _controller?.opponentRating;
     final oldIsOffline = _controller?.isOffline ?? true;
     final oldIsVsBot = _controller?.isVsBot ?? false;
+    final oldLevel = _controller?.level;
+    final oldConfig = _controller?.config;
 
     if (_controller != null) {
       _controller!.newMatchId = null;
@@ -123,6 +177,8 @@ class _CaroScreenState extends State<CaroScreen> {
         builder: (_) => ChangeNotifierProvider(
           create: (_) {
             final newController = CaroController(
+              level: oldLevel,
+              config: oldConfig,
               matchId: newMatchId,
               isOffline: oldIsOffline,
               isVsBot: oldIsVsBot,
@@ -178,12 +234,20 @@ class _CaroScreenState extends State<CaroScreen> {
       children: [
         _buildTopControlBar(controller),
         _buildOpponentHeader(controller),
-        const Expanded(
+        Expanded(
           child: Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: CaroBoard(),
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                const CaroBoard(),
+                if (controller.isStartBannerShowing)
+                  _StartBannerOverlay(controller: controller),
+              ],
+            ),
           ),
         ),
+        _buildGameActionButtons(controller),
         _buildPlayerFooter(controller),
       ],
     );
@@ -199,13 +263,26 @@ class _CaroScreenState extends State<CaroScreen> {
               SizedBox(
                 width: 220,
                 child: SingleChildScrollView(
-                  child: _buildOpponentHeader(controller),
+                  child: Column(
+                    children: [
+                      _buildOpponentHeader(controller),
+                      const SizedBox(height: 8),
+                      _buildGameActionButtons(controller),
+                    ],
+                  ),
                 ),
               ),
-              const Expanded(
+              Expanded(
                 child: Padding(
-                  padding: EdgeInsets.all(8),
-                  child: CaroBoard(),
+                  padding: const EdgeInsets.all(8),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      const CaroBoard(),
+                      if (controller.isStartBannerShowing)
+                        _StartBannerOverlay(controller: controller),
+                    ],
+                  ),
                 ),
               ),
               SizedBox(
@@ -218,6 +295,109 @@ class _CaroScreenState extends State<CaroScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildGameActionButtons(CaroController controller) {
+    final bool isBotThinking = controller.isVsBot && controller.currentTurn == "O";
+    final bool canHint = !controller.isFinished &&
+        !controller.isPaused &&
+        !controller.isStartBannerShowing &&
+        !isBotThinking;
+    final bool canUndo = controller.canUndo && !isBotThinking;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 10,
+        runSpacing: 6,
+        children: [
+          // Hint Button
+          BouncingGameButton(
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            backgroundColor: canHint
+                ? AppColors.winHighlight.withValues(alpha: 0.14)
+                : AppColors.surfaceSecondary.withValues(alpha: 0.5),
+            bevelColor: canHint
+                ? AppColors.iconGold.withValues(alpha: 0.5)
+                : AppColors.borderDark,
+            borderColor: canHint
+                ? AppColors.winHighlight.withValues(alpha: 0.8)
+                : AppColors.border,
+            onPressed: canHint
+                ? () {
+                    HapticService.instance.lightImpact();
+                    AudioService.instance.playButtonClick();
+                    controller.requestHint();
+                  }
+                : () {},
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.lightbulb_rounded,
+                  color: canHint ? AppColors.winHighlight : AppColors.textMuted,
+                  size: 16,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Hint',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: canHint
+                        ? AppColors.winHighlight
+                        : AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Undo Button
+          BouncingGameButton(
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            backgroundColor: canUndo
+                ? AppColors.primary.withValues(alpha: 0.14)
+                : AppColors.surfaceSecondary.withValues(alpha: 0.5),
+            bevelColor: canUndo
+                ? AppColors.primaryDark.withValues(alpha: 0.5)
+                : AppColors.borderDark,
+            borderColor: canUndo
+                ? AppColors.primary.withValues(alpha: 0.8)
+                : AppColors.border,
+            onPressed: canUndo
+                ? () {
+                    HapticService.instance.lightImpact();
+                    AudioService.instance.playButtonClick();
+                    controller.undoMove();
+                  }
+                : () {},
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.undo_rounded,
+                  color: canUndo ? AppColors.primary : AppColors.textMuted,
+                  size: 16,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Undo',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: canUndo ? AppColors.primary : AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -346,7 +526,11 @@ class _CaroScreenState extends State<CaroScreen> {
                               ? 'PAUSED'
                               : (controller.isFinished
                                   ? 'FINISHED'
-                                  : (controller.isVsBot ? 'VS BOT' : '2 PLAYERS')),
+                                  : (controller.level != null
+                                      ? controller.level!.displayName.toUpperCase()
+                                      : (controller.isVsBot
+                                          ? 'VS BOT'
+                                          : '2 PLAYERS'))),
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w900,
@@ -371,7 +555,7 @@ class _CaroScreenState extends State<CaroScreen> {
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            '5-IN-ROW',
+                            '${controller.winLen}-IN-ROW',
                             style: TextStyle(
                               fontSize: 9,
                               fontWeight: FontWeight.w900,
@@ -386,7 +570,7 @@ class _CaroScreenState extends State<CaroScreen> {
                 ),
               ),
 
-              // Pause / Resume Button (hidden when game is finished)
+              // Pause / Resume Button (Restart is intentionally removed from top bar)
               if (!controller.isFinished)
                 BouncingGameButton(
                   height: 34,
@@ -465,7 +649,7 @@ class _CaroScreenState extends State<CaroScreen> {
 
   Widget _buildOpponentHeader(CaroController controller) {
     final opponentName =
-        controller.opponentUsername ?? (controller.isVsBot ? 'Bot' : 'Player 2');
+        controller.opponentUsername ?? (controller.isVsBot ? 'Bot AI' : 'Player 2');
     final opponentSymbol = controller.mySymbol == 'X' ? 'O' : 'X';
     final isOpponentTurn = controller.currentTurn == opponentSymbol;
     final opponentRating = controller.opponentRating ?? 1200;
@@ -501,7 +685,6 @@ class _CaroScreenState extends State<CaroScreen> {
         children: [
           Row(
             children: [
-              // Avatar with dynamic color-changing timer ring
               _buildAvatarWithTimer(
                 isTurn: isOpponentTurn,
                 symbol: opponentSymbol,
@@ -511,7 +694,6 @@ class _CaroScreenState extends State<CaroScreen> {
               ),
               const SizedBox(width: 8),
 
-              // Username & Elo
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -557,7 +739,6 @@ class _CaroScreenState extends State<CaroScreen> {
               ),
               const SizedBox(width: 4),
 
-              // Score tag
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -615,7 +796,9 @@ class _CaroScreenState extends State<CaroScreen> {
         color: AppColors.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         border: Border.all(
-          color: (isMyTurn && !controller.isFinished) ? AppColors.primary : AppColors.border,
+          color: (isMyTurn && !controller.isFinished)
+              ? AppColors.primary
+              : AppColors.border,
           width: (isMyTurn && !controller.isFinished) ? 2.0 : 1.0,
         ),
         boxShadow: [
@@ -711,7 +894,6 @@ class _CaroScreenState extends State<CaroScreen> {
               ),
               const SizedBox(width: 4),
 
-              // Score tag
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -731,7 +913,6 @@ class _CaroScreenState extends State<CaroScreen> {
               ),
               const SizedBox(width: 4),
 
-              // Surrender button
               IconButton(
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -764,7 +945,6 @@ class _CaroScreenState extends State<CaroScreen> {
     required int? timeLeft,
     required int initialTime,
   }) {
-    // Dynamic timer color ring changing from green to amber to red
     Color timerColor = AppColors.timerNormal;
     if (timeLeft != null) {
       if (timeLeft <= 5) {
@@ -815,6 +995,144 @@ class _CaroScreenState extends State<CaroScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Start Banner Overlay that displays "START" + "Connect X to win"
+/// Auto-dismisses after 2 seconds and unblocks input.
+class _StartBannerOverlay extends StatefulWidget {
+  final CaroController controller;
+
+  const _StartBannerOverlay({required this.controller});
+
+  @override
+  State<_StartBannerOverlay> createState() => _StartBannerOverlayState();
+}
+
+class _StartBannerOverlayState extends State<_StartBannerOverlay>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _anim;
+  late Animation<double> _scale;
+  late Animation<double> _opacity;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _anim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _scale = CurvedAnimation(parent: _anim, curve: Curves.easeOutBack);
+    _opacity = CurvedAnimation(parent: _anim, curve: Curves.easeIn);
+    _anim.forward();
+
+    _timer = Timer(const Duration(milliseconds: 2000), () {
+      if (mounted) {
+        _anim.reverse().then((_) {
+          if (mounted) {
+            widget.controller.dismissStartBanner();
+          }
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _anim.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final winLen = widget.controller.winLen;
+    final levelName = widget.controller.level?.displayName;
+
+    return Center(
+      child: FadeTransition(
+        opacity: _opacity,
+        child: ScaleTransition(
+          scale: _scale,
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 28),
+            padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppColors.surface,
+                  AppColors.surfaceSecondary,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: AppColors.winHighlight, width: 2.0),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.winHighlight.withValues(alpha: 0.35),
+                  blurRadius: 24,
+                  spreadRadius: 2,
+                  offset: const Offset(0, 4),
+                ),
+                BoxShadow(
+                  color: AppColors.shadowMedium,
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.flag_rounded,
+                      color: AppColors.winHighlight,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'START',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 2.0,
+                        color: AppColors.winHighlight,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Connect $winLen to win',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                if (levelName != null) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    '$levelName Rank • ${widget.controller.rows}×${widget.controller.cols}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

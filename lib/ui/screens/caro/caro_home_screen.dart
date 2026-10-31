@@ -3,12 +3,14 @@ import 'package:provider/provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../models/user_model.dart';
 import '../../../../game/caro/caro_controller.dart';
+import '../../../../game/caro/game_config.dart';
 import '../../../../services/audio_service.dart';
 import '../../../../services/haptic_service.dart';
 import '../../../../services/local_storage_service.dart';
 import '../../widgets/bouncing_game_button.dart';
 import '../../widgets/game_glow_scaffold.dart';
 import '../../widgets/caro/caro_tutorial_dialog.dart';
+import '../../widgets/caro/caro_level_dialog.dart';
 import 'play/caro_playing_screen.dart';
 import 'history/match_history_screen.dart';
 import 'profile/settings_screen.dart';
@@ -77,30 +79,13 @@ class _CaroHomeScreenState extends State<CaroHomeScreen>
     await CaroTutorialDialog.showIfFirstTime(context);
     if (!mounted) return;
 
-    final user = _currentUser ??
-        UserModel(
-          id: 1,
-          username: "Player 1",
-          email: "player@local.game",
-          rating: 1200,
-        );
-
-    final matchId = DateTime.now().millisecondsSinceEpoch;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ChangeNotifierProvider(
-          create: (_) => CaroController(
-            matchId: matchId,
-            isOffline: true,
-            isVsBot: true,
-            initialMyRating: user.rating ?? 1200,
-            initialOpponentRating: 1400,
-          ),
-          child: const CaroScreen(),
-        ),
-      ),
-    ).then((_) => _checkLoginAndLoadData());
+    CaroLevelSelectDialog.show(
+      context: context,
+      isVsBot: true,
+      onSelectLevel: (selectedLevel) {
+        _launchMatch(selectedLevel, isVsBot: true);
+      },
+    );
   }
 
   Future<void> _startPassAndPlayMatch() async {
@@ -108,6 +93,16 @@ class _CaroHomeScreenState extends State<CaroHomeScreen>
     await CaroTutorialDialog.showIfFirstTime(context);
     if (!mounted) return;
 
+    CaroLevelSelectDialog.show(
+      context: context,
+      isVsBot: false,
+      onSelectLevel: (selectedLevel) {
+        _launchMatch(selectedLevel, isVsBot: false);
+      },
+    );
+  }
+
+  void _launchMatch(GameLevel level, {required bool isVsBot}) {
     final user = _currentUser ??
         UserModel(
           id: 1,
@@ -122,11 +117,12 @@ class _CaroHomeScreenState extends State<CaroHomeScreen>
       MaterialPageRoute(
         builder: (_) => ChangeNotifierProvider(
           create: (_) => CaroController(
+            level: level,
             matchId: matchId,
             isOffline: true,
-            isVsBot: false,
+            isVsBot: isVsBot,
             initialMyRating: user.rating ?? 1200,
-            initialOpponentRating: 1200,
+            initialOpponentRating: isVsBot ? 1400 : 1200,
           ),
           child: const CaroScreen(),
         ),
@@ -285,99 +281,31 @@ class _CaroHomeScreenState extends State<CaroHomeScreen>
   }
 
   Widget _buildGameLogo(bool isTablet) {
-    final double boardDim = isTablet ? 172.0 : 136.0;
-    final double padding = isTablet ? 8.0 : 6.0;
-    final double cellDim = (boardDim - (padding * 2) - ((isTablet ? 4.0 : 3.5) * 4)) / 5;
-    final double symbolSize = isTablet ? 16.5 : 13.0;
-
+    final double logoDim = isTablet ? 160.0 : 130.0;
     return Container(
-      width: boardDim,
-      height: boardDim,
+      width: logoDim,
+      height: logoDim,
       decoration: BoxDecoration(
-        color: AppColors.boardSurface,
-        borderRadius: BorderRadius.circular(isTablet ? 22.0 : 18.0),
-        border: Border.all(
-          color: AppColors.boardBorder,
-          width: 2.0,
-        ),
+        borderRadius: BorderRadius.circular(isTablet ? 24.0 : 20.0),
         boxShadow: [
           BoxShadow(
-            color: AppColors.shadowMedium,
-            blurRadius: 26,
-            offset: const Offset(0, 8),
+            color: AppColors.glowPrimary,
+            blurRadius: 22,
+            offset: const Offset(0, 6),
           ),
           BoxShadow(
-            color: AppColors.shadowSubtle,
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: AppColors.shadowMedium,
+            blurRadius: 18,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Stack(
-        children: [
-          // 5×5 Grid (5 diagonal winning X's and 20 O's)
-          Padding(
-            padding: EdgeInsets.all(padding),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: List.generate(5, (r) {
-                return Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: List.generate(5, (c) {
-                    final bool isWinningCell = (r == c);
-
-                    return Container(
-                      width: cellDim,
-                      height: cellDim,
-                      decoration: BoxDecoration(
-                        color: isWinningCell
-                            ? AppColors.winHighlight.withValues(alpha: 0.16)
-                            : AppColors.cellBackground,
-                        borderRadius:
-                            BorderRadius.circular(isTablet ? 7.0 : 5.5),
-                        border: Border.all(
-                          color: isWinningCell
-                              ? AppColors.winHighlight.withValues(alpha: 0.65)
-                              : AppColors.border,
-                          width: isWinningCell ? 1.2 : 1.0,
-                        ),
-                        boxShadow: isWinningCell
-                            ? [
-                                BoxShadow(
-                                  color: AppColors.winHighlight
-                                      .withValues(alpha: 0.35),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 1),
-                                ),
-                              ]
-                            : null,
-                      ),
-                      child: Center(
-                        child: isWinningCell
-                            ? _SymbolX(size: symbolSize)
-                            : _SymbolO(size: symbolSize),
-                      ),
-                    );
-                  }),
-                );
-              }),
-            ),
-          ),
-
-          // Glowing Amber strike line over 5 winning diagonal X's
-          Positioned.fill(
-            child: IgnorePointer(
-              child: CustomPaint(
-                size: Size(boardDim, boardDim),
-                painter: _MicroBoardStrikePainter(
-                  progress: 1.0,
-                  start: Offset(boardDim * 0.08, boardDim * 0.08),
-                  end: Offset(boardDim * 0.92, boardDim * 0.92),
-                ),
-              ),
-            ),
-          ),
-        ],
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(isTablet ? 24.0 : 20.0),
+        child: Image.asset(
+          'assets/tic-tac-go-logo.png',
+          fit: BoxFit.contain,
+        ),
       ),
     );
   }
@@ -579,149 +507,5 @@ class _CaroHomeScreenState extends State<CaroHomeScreen>
         );
       },
     );
-  }
-}
-
-/// Zero-asset custom painted 'X' with Cobalt Royal Blue Gradient
-class _SymbolX extends StatelessWidget {
-  final double size;
-  const _SymbolX({required this.size});
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      size: Size(size, size),
-      painter: const _XPainter(),
-    );
-  }
-}
-
-class _XPainter extends CustomPainter {
-  const _XPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    final paint = Paint()
-      ..shader = const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Color(0xFF1D4ED8), // Cobalt Blue Dark
-          Color(0xFF60A5FA), // Cobalt Blue Light
-        ],
-      ).createShader(rect)
-      ..strokeWidth = size.width * 0.22
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    final double pad = size.width * 0.16;
-    canvas.drawLine(
-      Offset(pad, pad),
-      Offset(size.width - pad, size.height - pad),
-      paint,
-    );
-    canvas.drawLine(
-      Offset(size.width - pad, pad),
-      Offset(pad, size.height - pad),
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-/// Zero-asset custom painted 'O' with Coral Crimson Red Gradient
-class _SymbolO extends StatelessWidget {
-  final double size;
-  const _SymbolO({required this.size});
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      size: Size(size, size),
-      painter: const _OPainter(),
-    );
-  }
-}
-
-class _OPainter extends CustomPainter {
-  const _OPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final double strokeW = size.width * 0.20;
-    final rect = Offset.zero & size;
-    final paint = Paint()
-      ..shader = const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Color(0xFFB91C1C), // Coral Crimson Dark
-          Color(0xFFF87171), // Coral Crimson Light
-        ],
-      ).createShader(rect)
-      ..strokeWidth = strokeW
-      ..style = PaintingStyle.stroke;
-
-    final Offset center = Offset(size.width / 2, size.height / 2);
-    final double radius = (size.width - strokeW - (size.width * 0.16)) / 2;
-    canvas.drawCircle(center, radius, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-/// Glowing strike-through line over winning symbols on the micro-board
-class _MicroBoardStrikePainter extends CustomPainter {
-  final double progress;
-  final Offset start;
-  final Offset end;
-
-  const _MicroBoardStrikePainter({
-    required this.progress,
-    required this.start,
-    required this.end,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (progress <= 0.0) return;
-
-    final currentEnd = Offset.lerp(start, end, progress)!;
-
-    // 1. Ambient bloom in Glowing Amber/Gold
-    final glowPaint = Paint()
-      ..color = const Color(0xFFF59E0B).withValues(alpha: 0.45)
-      ..strokeWidth = 11.0
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6.0);
-    canvas.drawLine(start, currentEnd, glowPaint);
-
-    // 2. Main vivid strike line
-    final linePaint = Paint()
-      ..color = const Color(0xFFF59E0B)
-      ..strokeWidth = 4.0
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-    canvas.drawLine(start, currentEnd, linePaint);
-
-    // 3. Specular core white highlight
-    final corePaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.95)
-      ..strokeWidth = 1.4
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-    canvas.drawLine(start, currentEnd, corePaint);
-  }
-
-  @override
-  bool shouldRepaint(_MicroBoardStrikePainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.start != start ||
-        oldDelegate.end != end;
   }
 }

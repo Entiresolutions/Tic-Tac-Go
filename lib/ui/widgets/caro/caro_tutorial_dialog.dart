@@ -46,9 +46,9 @@ class _CaroTutorialDialogState extends State<CaroTutorialDialog> {
   final List<_TutorialSlideData> _slides = [
     _TutorialSlideData(
       stepNumber: '1',
-      title: 'Connect 5 in a Row',
+      title: 'Connect Winning Streaks',
       description:
-          'Place your marks to create an unbroken line of 5 symbols horizontally, vertically, or diagonally on the 7×7 board to win!',
+          'Place your marks to create an unbroken line horizontally, vertically, or diagonally. Win streaks dynamically scale from 3 to 7 based on your chosen level!',
       icon: Icons.emoji_events_rounded,
       iconColor: AppColors.winHighlight,
       badgeText: 'WIN CONDITION',
@@ -57,19 +57,19 @@ class _CaroTutorialDialogState extends State<CaroTutorialDialog> {
       stepNumber: '2',
       title: 'Blue (X) vs Red (O)',
       description:
-          'You play as X (Blue) and your opponent plays as O (Red). Plan your attacks while blocking opponent streaks before they reach 5!',
+          'You play as X (Blue) and your opponent plays as O (Red). Plan your attacks, create dual threats, and block opponent streaks early!',
       icon: Icons.swap_horiz_rounded,
       iconColor: AppColors.primary,
       badgeText: 'TACTICS & DEFENSE',
     ),
     _TutorialSlideData(
       stepNumber: '3',
-      title: '30-Second Turn Clock',
+      title: 'Hints, Undos & Turn Clock',
       description:
-          'Every turn has a 30-second countdown timer. Think fast, outmaneuver your opponent, and take control of the center of the board!',
-      icon: Icons.timer_rounded,
+          'Use Hints to find optimal Master moves, Undo moves to reconsider strategies, and manage your 30-second turn timer!',
+      icon: Icons.lightbulb_rounded,
       iconColor: AppColors.timerNormal,
-      badgeText: 'SPEED & FOCUS',
+      badgeText: 'TACTICAL TOOLS',
     ),
   ];
 

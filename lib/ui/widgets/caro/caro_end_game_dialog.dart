@@ -1,20 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:tic_tac_go/core/theme/app_colors.dart';
 import 'package:tic_tac_go/game/caro/caro_controller.dart';
+import 'package:tic_tac_go/game/caro/game_config.dart';
 import '../bouncing_game_button.dart';
 
 /// Interactive Center Dialog for Match Completion ("Game Over / Victory / Defeat / Draw").
-/// Displays the winner outcome, match scores series, and actions (Play Again / Home).
+/// Displays the winner outcome, match scores series, unlocked progression,
+/// Master celebration banner, and actions (Next Level / Play Again / Home).
 class CaroEndGameDialog extends StatelessWidget {
   final CaroController controller;
   final VoidCallback onPlayAgain;
   final VoidCallback onGoHome;
+  final Function(GameLevel level)? onNextLevel;
 
   const CaroEndGameDialog({
     super.key,
     required this.controller,
     required this.onPlayAgain,
     required this.onGoHome,
+    this.onNextLevel,
   });
 
   static Future<void> show({
@@ -22,6 +26,7 @@ class CaroEndGameDialog extends StatelessWidget {
     required CaroController controller,
     required VoidCallback onPlayAgain,
     required VoidCallback onGoHome,
+    Function(GameLevel level)? onNextLevel,
   }) {
     return showDialog(
       context: context,
@@ -30,6 +35,7 @@ class CaroEndGameDialog extends StatelessWidget {
         controller: controller,
         onPlayAgain: onPlayAgain,
         onGoHome: onGoHome,
+        onNextLevel: onNextLevel,
       ),
     );
   }
@@ -59,20 +65,29 @@ class CaroEndGameDialog extends StatelessWidget {
         : (winnerSymbol == 'O' ? AppColors.oPrimary : outcomeColor);
 
     final String title = hasWinner
-        ? (iAmWinner ? 'VICTORY!' : 'DEFEAT')
+        ? (iAmWinner
+            ? (controller.isMasterBeaten ? 'MASTER CONQUERED!' : 'VICTORY!')
+            : 'DEFEAT')
         : 'MATCH DRAWN!';
 
     final IconData mainIcon = hasWinner
-        ? (iAmWinner ? Icons.emoji_events_rounded : Icons.military_tech_rounded)
+        ? (iAmWinner
+            ? (controller.isMasterBeaten
+                ? Icons.workspace_premium_rounded
+                : Icons.emoji_events_rounded)
+            : Icons.military_tech_rounded)
         : Icons.handshake_rounded;
+
+    final bool hasNextLevel =
+        iAmWinner && controller.newlyUnlockedLevel != null && onNextLevel != null;
 
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
       child: Center(
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 350),
+          constraints: const BoxConstraints(maxWidth: 360),
           decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(24),
@@ -90,14 +105,14 @@ class CaroEndGameDialog extends StatelessWidget {
               ),
             ],
           ),
-          padding: const EdgeInsets.fromLTRB(22, 24, 22, 20),
+          padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               // Badge Icon with Glow
               Container(
-                width: 68,
-                height: 68,
+                width: 64,
+                height: 64,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: outcomeColor.withValues(alpha: 0.12),
@@ -116,40 +131,120 @@ class CaroEndGameDialog extends StatelessWidget {
                 child: Icon(
                   mainIcon,
                   color: outcomeColor,
-                  size: 38,
+                  size: 36,
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
 
               // Title
               Text(
                 title,
+                textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 22,
+                  fontSize: controller.isMasterBeaten ? 19 : 21,
                   fontWeight: FontWeight.w900,
-                  letterSpacing: 1.0,
+                  letterSpacing: 0.8,
                   color: AppColors.textPrimary,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 3),
 
-              // Subtitle
+              // Subtitle with Level Name
               Text(
-                controller.isVsBot
-                    ? 'Tic Tac Go vs Bot AI'
-                    : 'Tic Tac Go 2 Players',
+                controller.level != null
+                    ? '${controller.level!.displayName} Rank • ${controller.rows}×${controller.cols} Grid'
+                    : (controller.isVsBot
+                        ? 'Tic Tac Go vs Bot AI'
+                        : 'Tic Tac Go 2 Players'),
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: AppColors.textSecondary,
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
 
-              // Bottom-Wala Data Pill (Winner/Outcome Announcement)
+              // Special Master Celebration Banner
+              if (controller.isMasterBeaten) ...[
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        AppColors.winHighlight.withValues(alpha: 0.22),
+                        AppColors.primary.withValues(alpha: 0.22),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppColors.winHighlight,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(
+                        Icons.workspace_premium_rounded,
+                        color: AppColors.winHighlight,
+                        size: 20,
+                      ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          "MASTER! You beat the flawless AI!",
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.winHighlight,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else if (hasNextLevel) ...[
+                // Next Level Unlocked Banner
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.winHighlight.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppColors.winHighlight,
+                      width: 1.2,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.lock_open_rounded,
+                        color: AppColors.winHighlight,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          "Next level unlocked: ${controller.newlyUnlockedLevel!.displayName}!",
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.winHighlight,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              // Outcome Announcement Pill
               Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                 decoration: BoxDecoration(
                   color: winnerSymbolColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
@@ -172,12 +267,14 @@ class CaroEndGameDialog extends StatelessWidget {
                     Flexible(
                       child: Text(
                         hasWinner
-                            ? "$winnerSymbol CONNECTED 5! WINNER!"
-                            : "MATCH DRAWN!",
+                            ? "$winnerSymbol CONNECTED ${controller.winLen}! WINNER!"
+                            : (controller.drawReason != null
+                                ? "MATCH DRAWN! ${controller.drawReason}"
+                                : "MATCH DRAWN!"),
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 11,
                           fontWeight: FontWeight.w900,
-                          letterSpacing: 0.5,
+                          letterSpacing: 0.4,
                           color: winnerSymbolColor,
                         ),
                         maxLines: 1,
@@ -187,12 +284,12 @@ class CaroEndGameDialog extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
 
-              // Running Match Score Breakdown
+              // Running Match Score Series
               Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceSecondary,
                   borderRadius: BorderRadius.circular(16),
@@ -203,9 +300,9 @@ class CaroEndGameDialog extends StatelessWidget {
                   children: [
                     _buildScoreItem(
                         'YOU (X)', controller.myWins, AppColors.primary),
-                    Container(width: 1, height: 24, color: AppColors.border),
+                    Container(width: 1, height: 22, color: AppColors.border),
                     _buildScoreItem('DRAWS', controller.draws, AppColors.draw),
-                    Container(width: 1, height: 24, color: AppColors.border),
+                    Container(width: 1, height: 22, color: AppColors.border),
                     _buildScoreItem(
                       controller.isVsBot ? 'BOT (O)' : 'P2 (O)',
                       controller.opponentWins,
@@ -214,9 +311,8 @@ class CaroEndGameDialog extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
 
-              // Move count
               Text(
                 'Total moves: ${controller.moveCount}',
                 style: TextStyle(
@@ -225,33 +321,70 @@ class CaroEndGameDialog extends StatelessWidget {
                   color: AppColors.textMuted,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
 
-              // Action Buttons: Play Again & Home
+              // Action Buttons
+              if (hasNextLevel) ...[
+                BouncingGameButton(
+                  height: 42,
+                  backgroundColor: AppColors.winHighlight,
+                  bevelColor: AppColors.iconGold,
+                  borderColor: AppColors.winHighlight,
+                  onPressed: () => onNextLevel!(controller.newlyUnlockedLevel!),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.arrow_forward_rounded,
+                          color: AppColors.textWhite, size: 18),
+                      SizedBox(width: 6),
+                      Text(
+                        'Next Level',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textWhite,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+
               Row(
                 children: [
                   Expanded(
                     child: BouncingGameButton(
-                      height: 44,
-                      backgroundColor: AppColors.primary,
-                      bevelColor: AppColors.primaryDark,
-                      borderColor: AppColors.primaryDark,
+                      height: 42,
+                      backgroundColor: hasNextLevel
+                          ? AppColors.surfaceSecondary
+                          : AppColors.primary,
+                      bevelColor: hasNextLevel
+                          ? AppColors.borderDark
+                          : AppColors.primaryDark,
+                      borderColor: hasNextLevel
+                          ? AppColors.border
+                          : AppColors.primaryDark,
                       onPressed: onPlayAgain,
-                      child: const Row(
+                      child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
                             Icons.refresh_rounded,
-                            color: AppColors.textWhite,
+                            color: hasNextLevel
+                                ? AppColors.textPrimary
+                                : AppColors.textWhite,
                             size: 16,
                           ),
-                          SizedBox(width: 4),
+                          const SizedBox(width: 4),
                           Text(
                             'Play Again',
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: 12,
                               fontWeight: FontWeight.w800,
-                              color: AppColors.textWhite,
+                              color: hasNextLevel
+                                  ? AppColors.textPrimary
+                                  : AppColors.textWhite,
                             ),
                           ),
                         ],
@@ -261,7 +394,7 @@ class CaroEndGameDialog extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: BouncingGameButton(
-                      height: 44,
+                      height: 42,
                       backgroundColor: AppColors.surfaceSecondary,
                       bevelColor: AppColors.borderDark,
                       borderColor: AppColors.border,
@@ -278,7 +411,7 @@ class CaroEndGameDialog extends StatelessWidget {
                           Text(
                             'Home',
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: 12,
                               fontWeight: FontWeight.w800,
                               color: AppColors.textPrimary,
                             ),
@@ -301,21 +434,20 @@ class CaroEndGameDialog extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          label,
+          score.toString(),
           style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
+            fontSize: 16,
+            fontWeight: FontWeight.w900,
             color: color,
-            letterSpacing: 0.5,
           ),
         ),
         const SizedBox(height: 2),
         Text(
-          '$score',
+          label,
           style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w900,
-            color: AppColors.textPrimary,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textSecondary,
           ),
         ),
       ],

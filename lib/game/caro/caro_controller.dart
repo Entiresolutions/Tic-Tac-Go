@@ -1,6 +1,8 @@
-﻿// ignore_for_file: avoid_print
+// ignore_for_file: avoid_print
 
+import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:tic_tac_go/configs/app_config.dart';
 import 'package:tic_tac_go/services/auth_service.dart';
@@ -8,9 +10,31 @@ import 'package:tic_tac_go/services/audio_service.dart';
 import 'package:tic_tac_go/services/caro_service.dart';
 import 'package:tic_tac_go/services/local_storage_service.dart';
 import 'package:tic_tac_go/game/caro/winning_line_data.dart';
+import 'package:tic_tac_go/game/caro/game_config.dart';
+import 'package:tic_tac_go/game/caro/bot_engine.dart';
 
-/// Manages Caro game logic (board, chat, and WebSocket connection).
+/// Move history record for undo functionality.
+class CaroMoveRecord {
+  final int row;
+  final int col;
+  final String symbol;
+  final int? prevLastRow;
+  final int? prevLastCol;
+
+  const CaroMoveRecord({
+    required this.row,
+    required this.col,
+    required this.symbol,
+    this.prevLastRow,
+    this.prevLastCol,
+  });
+}
+
+/// Manages Caro/Tic Tac GO game logic, dynamic configs, bot AI, undo, hints,
+/// early draw detection, and progression.
 class CaroController extends ChangeNotifier {
+  final GameConfig config;
+  final GameLevel? level;
   final int rows;
   final int cols;
   final int winLen;
@@ -26,9 +50,9 @@ class CaroController extends ChangeNotifier {
   int? opponentUserId;
   String? myUsername;
   String? opponentUsername;
-  int? myRating; // My rating
-  int? opponentRating; // Opponent's rating
-  int? myRatingChange; // Rating change after the match (from the server)
+  int? myRating;
+  int? opponentRating;
+  int? myRatingChange;
   bool isConnected = false;
   bool isFinished = false;
   int? winnerId;
@@ -36,6 +60,23 @@ class CaroController extends ChangeNotifier {
   WinningLineData? winningLine;
   int? lastMoveRow;
   int? lastMoveCol;
+
+  // Progression & Celebration
+  bool isMasterBeaten = false;
+  GameLevel? newlyUnlockedLevel;
+  String? drawReason;
+
+  // Hint & Undo
+  Position? hintCell;
+  final List<CaroMoveRecord> moveHistory = [];
+
+  // Start Banner state
+  bool isStartBannerShowing = true;
+
+  // Bot mistake management
+  final Set<int> _botMistakeTurns = {};
+  int _botTurnCount = 0;
+  Timer? _botTimer;
 
   // Rematch
   bool rematchRequested = false;
@@ -50,41 +91,49 @@ class CaroController extends ChangeNotifier {
   int draws = 0;
 
   // Timer
-  int? timeLeft; // seconds
-  int? initialTimeLeft; // Initial value at the start of the turn
+  int? timeLeft;
+  int? initialTimeLeft;
   DateTime? turnStartTime;
-  bool _isTimerRunning = false; // Flag tracking the timer state
-  bool isPaused = false; // Pause state
+  bool _isTimerRunning = false;
+  bool isPaused = false;
   CaroService? _service;
 
-  // 🗨️ Chat messages (displayed in the panel)
+  // Chat messages
   List<Map<String, dynamic>> chatMessages = [];
-  int unreadMessageCount = 0; // Number of unread messages
-  bool isChatOpen = false; // Chat panel state
+  int unreadMessageCount = 0;
+  bool isChatOpen = false;
 
   CaroController({
-    this.rows = 7,
-    this.cols = 7,
-    this.winLen = 5,
+    GameConfig? config,
+    this.level,
+    int? rows,
+    int? cols,
+    int? winLen,
     required this.matchId,
     this.isOffline = false,
     this.isVsBot = false,
-    int? initialMyRating, // Initial rating
-    int? initialOpponentRating, // Initial opponent rating
-  }) {
-    // Set initial ratings if provided
+    int? initialMyRating,
+    int? initialOpponentRating,
+  })  : config = config ??
+            (level?.config ??
+                GameConfig.create(
+                  level: level ?? GameLevel.master,
+                  rows: rows ?? 7,
+                  cols: cols ?? 7,
+                  winLen: winLen ?? 5,
+                  botMistakes: 0,
+                )),
+        rows = rows ?? (config?.rows ?? (level?.rows ?? 7)),
+        cols = cols ?? (config?.cols ?? (level?.cols ?? 7)),
+        winLen = winLen ?? (config?.winLen ?? (level?.winLen ?? 5)) {
     myRating = initialMyRating ?? 1200;
-    opponentRating = initialOpponentRating ?? 1200;
-    print(
-      "🎮 CaroController created with ratings: my=$myRating, opponent=$opponentRating (offline=$isOffline, vsBot=$isVsBot)",
-    );
+    opponentRating = initialOpponentRating ?? (isVsBot ? 1400 : 1200);
 
-    // Initialize the board in the constructor
     initBoard();
   }
 
   // ==========================================================
-  // 🔧 Setup board
+  // 🔧 Setup Board
   // ==========================================================
   void initBoard() {
     board = List.generate(rows, (_) => List.filled(cols, ""));
@@ -102,6 +151,23 @@ class CaroController extends ChangeNotifier {
     rematchRequested = false;
     opponentRematchRequested = false;
     opponentLeft = false;
+    hintCell = null;
+    drawReason = null;
+    newlyUnlockedLevel = null;
+    isMasterBeaten = false;
+    isStartBannerShowing = true;
+    moveHistory.clear();
+
+    _cancelBotTimer();
+    _botTurnCount = 0;
+    _botMistakeTurns.clear();
+    final mistakes = config.botMistakes;
+    if (mistakes > 0) {
+      final random = Random();
+      while (_botMistakeTurns.length < mistakes) {
+        _botMistakeTurns.add(random.nextInt(6) + 1);
+      }
+    }
 
     if (isOffline) {
       mySymbol = "X";
@@ -119,20 +185,104 @@ class CaroController extends ChangeNotifier {
     }
   }
 
+  void dismissStartBanner() {
+    if (!isStartBannerShowing) return;
+    isStartBannerShowing = false;
+    _startTimerIfNeeded();
+    notifyListeners();
+  }
+
+  void _cancelBotTimer() {
+    _botTimer?.cancel();
+    _botTimer = null;
+  }
+
   // ==========================================================
-  // 🌐 Connect to the WebSocket using the existing matchId
+  // 💡 Hint & Undo Support
+  // ==========================================================
+  bool get canUndo =>
+      !isFinished && moveHistory.isNotEmpty && !isStartBannerShowing;
+
+  void requestHint() {
+    if (isFinished || isPaused || isStartBannerShowing) return;
+    if (isVsBot && currentTurn != mySymbol) return;
+
+    final hint = BotEngine.findHintMove(
+      board: board,
+      config: config,
+      playerSymbol: currentTurn,
+    );
+    hintCell = hint;
+    notifyListeners();
+  }
+
+  void clearHint() {
+    if (hintCell != null) {
+      hintCell = null;
+      notifyListeners();
+    }
+  }
+
+  void undoMove() {
+    if (!canUndo) return;
+
+    _cancelBotTimer();
+    hintCell = null;
+
+    if (isVsBot) {
+      // Revert bot's move first if it exists
+      if (moveHistory.isNotEmpty && moveHistory.last.symbol == "O") {
+        final botMove = moveHistory.removeLast();
+        board[botMove.row][botMove.col] = "";
+        moveCount = (moveCount - 1).clamp(0, rows * cols);
+      }
+      // Then revert user's move
+      if (moveHistory.isNotEmpty && moveHistory.last.symbol == "X") {
+        final userMove = moveHistory.removeLast();
+        board[userMove.row][userMove.col] = "";
+        moveCount = (moveCount - 1).clamp(0, rows * cols);
+      }
+      currentTurn = "X";
+    } else {
+      // 2 Players mode: revert exactly one move
+      final lastMove = moveHistory.removeLast();
+      board[lastMove.row][lastMove.col] = "";
+      moveCount = (moveCount - 1).clamp(0, rows * cols);
+      currentTurn = lastMove.symbol;
+    }
+
+    if (moveHistory.isNotEmpty) {
+      lastMoveRow = moveHistory.last.row;
+      lastMoveCol = moveHistory.last.col;
+    } else {
+      lastMoveRow = null;
+      lastMoveCol = null;
+    }
+
+    // Reset turn timer to 30s
+    _stopTimer();
+    timeLeft = 30;
+    initialTimeLeft = 30;
+    turnStartTime = DateTime.now();
+    notifyListeners();
+    _startTimerIfNeeded();
+  }
+
+  // ==========================================================
+  // 🌐 Connect to WebSocket (Online matches)
   // ==========================================================
   Future<void> connectToServer() async {
     if (isOffline) {
       isConnected = true;
-      _startTimerIfNeeded();
+      if (!isStartBannerShowing) {
+        _startTimerIfNeeded();
+      }
       notifyListeners();
       return;
     }
 
     try {
       final token = (await AuthService.getToken()) ?? "guest_token";
-
       final wsUrl = AppConfig.wsMatchUrl(matchId, token);
       _service = CaroService(
         wsUrl: wsUrl,
@@ -143,78 +293,46 @@ class CaroController extends ChangeNotifier {
       await _service!.connect();
       isConnected = true;
       notifyListeners();
-
-      print("🎮 Connected to Caro match $matchId");
     } catch (e) {
       print("❌ connectToServer error: $e");
     }
   }
 
-  // ==========================================================
-  // 🧠 Handle messages from the server
-  // ==========================================================
   void _handleServerMessage(Map<String, dynamic> msg) {
     final type = msg["type"];
     final payload = msg["payload"] ?? {};
 
-    print("📨 Received message: $type"); // DEBUG
-    print("   Payload: $payload"); // DEBUG
-
     switch (type) {
       case "joined":
-        // Receive the full snapshot from the server
         mySymbol = payload["you"]?["symbol"];
         myUserId = payload["you"]?["user_id"];
         opponentSymbol = mySymbol == "X" ? "O" : "X";
         currentTurn = payload["turn"] ?? "X";
         moveCount = payload["turn_no"] ?? 0;
 
-        // Parse timeLeft carefully
         final timeLimitRaw = payload["time_left"];
         if (timeLimitRaw != null) {
-          if (timeLimitRaw is int) {
-            timeLeft = timeLimitRaw;
-          } else if (timeLimitRaw is double) {
-            timeLeft = timeLimitRaw.toInt();
-          } else {
-            timeLeft = int.tryParse(timeLimitRaw.toString());
-          }
+          timeLeft = int.tryParse(timeLimitRaw.toString()) ?? 30;
         }
-        print("⏰ Time left from server: $timeLimitRaw → $timeLeft");
 
-        // Load players
         final players = payload["players"] as List?;
-        print(
-          "🔍 DEBUG: Players from server: $players",
-        ); // Debug full players data
         if (players != null) {
           for (var p in players) {
             final uid = p["user_id"];
             final username = p["username"];
-            final rating = p["rating"]; // Get the rating from the server
-
-            print(
-              "🔍 DEBUG: Player - uid: $uid, username: $username, rating: $rating",
-            ); // Debug each player
+            final rating = p["rating"];
 
             if (uid == myUserId) {
               myUsername = username;
               myRating = rating;
-              print("✅ Set myRating = $myRating"); // Confirm set
             } else {
               opponentUserId = uid;
               opponentUsername = username;
               opponentRating = rating;
-              print("✅ Set opponentRating = $opponentRating"); // Confirm set
             }
           }
         }
 
-        print(
-          "👤 FINAL: My username: $myUsername (Rating: $myRating), Opponent: $opponentUsername (Rating: $opponentRating)",
-        );
-
-        // Load the board from the server
         final boardData = payload["board"] as List?;
         if (boardData != null && boardData.isNotEmpty) {
           for (int i = 0; i < boardData.length && i < rows; i++) {
@@ -226,31 +344,17 @@ class CaroController extends ChangeNotifier {
         }
 
         notifyListeners();
-        print("🙋 Joined match as $mySymbol (user_id: $myUserId)");
         _startTimerIfNeeded();
         break;
 
       case "start":
         currentTurn = payload["turn"];
-
         final timeLimitStart = payload["time_limit"];
-        if (timeLimitStart != null) {
-          if (timeLimitStart is int) {
-            timeLeft = timeLimitStart;
-          } else if (timeLimitStart is double) {
-            timeLeft = timeLimitStart.toInt();
-          } else {
-            timeLeft = int.tryParse(timeLimitStart.toString()) ?? 30;
-          }
-        } else {
-          // Fallback: use the default 30 seconds if the server doesn't send time_limit
-          timeLeft = 30;
-        }
-        print("🚀 Game started — turn = $currentTurn, timeLeft = $timeLeft");
-
+        timeLeft = int.tryParse(timeLimitStart.toString()) ?? 30;
         notifyListeners();
         _startTimerIfNeeded();
         break;
+
       case "move":
         final x = payload["x"];
         final y = payload["y"];
@@ -259,51 +363,24 @@ class CaroController extends ChangeNotifier {
         AudioService.instance.playMovePlacement();
         currentTurn = payload["next_turn"];
         moveCount = payload["turn_no"] ?? moveCount + 1;
-
-        // CRITICAL: Stop timer cũ trước khi reset time
         _stopTimer();
 
         final timeLimitMove = payload["time_limit"];
-        if (timeLimitMove != null) {
-          if (timeLimitMove is int) {
-            timeLeft = timeLimitMove;
-          } else if (timeLimitMove is double) {
-            timeLeft = timeLimitMove.toInt();
-          } else {
-            timeLeft = int.tryParse(timeLimitMove.toString()) ?? 30;
-          }
-        } else {
-          // Fallback: reset to 30 seconds
-          timeLeft = 30;
-        }
-
-        print(
-          "📍 Move: ($x,$y) by $symbol, next turn: $currentTurn, timeLeft = $timeLeft",
-        );
+        timeLeft = int.tryParse(timeLimitMove.toString()) ?? 30;
 
         notifyListeners();
         _startTimerIfNeeded();
         break;
+
       case "win":
         isFinished = true;
         winnerId = payload["winner_user_id"];
-
-        // Update score
         if (winnerId == myUserId) {
           myWins++;
         } else {
           opponentWins++;
         }
 
-        // Parse the rating change from the server
-        final ratingChanges =
-            payload["rating_changes"] as Map<String, dynamic>?;
-        if (ratingChanges != null && myUserId != null) {
-          myRatingChange = ratingChanges[myUserId.toString()];
-          print("💎 Rating change: $myRatingChange");
-        }
-
-        // Parse winning line
         final line = payload["line"] as List?;
         if (line != null) {
           winningLine = WinningLineData(
@@ -312,103 +389,38 @@ class CaroController extends ChangeNotifier {
         }
 
         notifyListeners();
-        print("🏆 Winner: user $winnerId (Score: $myWins-$opponentWins)");
         break;
 
       case "draw":
         isFinished = true;
         winnerId = null;
         draws++;
-
-        // Parse the rating change from the server (draw = 0)
-        final ratingChanges =
-            payload["rating_changes"] as Map<String, dynamic>?;
-        if (ratingChanges != null && myUserId != null) {
-          myRatingChange = ratingChanges[myUserId.toString()];
-          print("💎 Rating change: $myRatingChange");
-        }
-
         notifyListeners();
-        print("🤝 Game ended in a draw (Total draws: $draws)");
         break;
 
       case "timeout":
-        isFinished = true;
-        winnerId = payload["winner_user_id"];
-        timeLeft = 0; // Set to 0 to stop the timer
-
-        // Update score
-        if (winnerId == myUserId) {
-          myWins++;
-        } else {
-          opponentWins++;
-        }
-
-        // Parse the rating change from the server
-        final ratingChanges =
-            payload["rating_changes"] as Map<String, dynamic>?;
-        if (ratingChanges != null && myUserId != null) {
-          myRatingChange = ratingChanges[myUserId.toString()];
-          print("💎 Rating change: $myRatingChange");
-        }
-
-        notifyListeners();
-        print(
-          "⏰ Timeout! Loser: ${payload["loser_user_id"]}, Winner: user $winnerId (Score: $myWins-$opponentWins)",
-        );
-        break;
-
       case "surrender":
         isFinished = true;
         winnerId = payload["winner_user_id"];
-
-        // Update score
         if (winnerId == myUserId) {
           myWins++;
         } else {
           opponentWins++;
         }
-
-        // Parse the rating change from the server
-        final ratingChanges =
-            payload["rating_changes"] as Map<String, dynamic>?;
-        if (ratingChanges != null && myUserId != null) {
-          myRatingChange = ratingChanges[myUserId.toString()];
-          print("💎 Rating change: $myRatingChange");
-        }
-
         notifyListeners();
-        print(
-          "🏳️ Player ${payload["surrendered_user_id"]} surrendered (Score: $myWins-$opponentWins)",
-        );
         break;
 
       case "disconnect":
-        final disconnectedUserId = payload["disconnected_user_id"];
-
-        // If the opponent disconnects while the end-game dialog is open or the game is in progress
-        if (disconnectedUserId != myUserId) {
+      case "player_left":
+        final leftUserId = payload["user_id"] ?? payload["disconnected_user_id"];
+        if (leftUserId != myUserId) {
           opponentLeft = true;
-          print("🔌 Opponent left! User $disconnectedUserId disconnected");
         }
-
-        // Set the winner only if the game hasn't finished
         if (!isFinished) {
           isFinished = true;
           winnerId = payload["winner_user_id"];
         }
-
         notifyListeners();
-        break;
-
-      case "player_left":
-        // Special case: a player leaves while the end-game dialog is open
-        final leftUserId = payload["user_id"];
-        if (leftUserId != myUserId) {
-          opponentLeft = true;
-          print("👋 Opponent left the room! User $leftUserId");
-          notifyListeners();
-        }
         break;
 
       case "chat":
@@ -417,65 +429,43 @@ class CaroController extends ChangeNotifier {
           "message": payload["message"],
           "time": payload["time"],
         });
-
-        // Increment the unread count if the chat is closed
-        if (!isChatOpen) {
-          unreadMessageCount++;
-        }
-
+        if (!isChatOpen) unreadMessageCount++;
         notifyListeners();
         break;
 
       case "rematch_request":
-        // Someone requested a rematch
         rematchRequestCount = payload["total_requests"] ?? 0;
         final fromUserId = payload["from_user_id"];
-
-        // If the opponent requested a rematch
         if (fromUserId != myUserId) {
           opponentRematchRequested = true;
         }
-
-        print(
-          "🔄 Rematch request from user $fromUserId ($rematchRequestCount/2)",
-        );
         notifyListeners();
         break;
 
       case "rematch_accepted":
-        // Both players accepted; a new match is available
         newMatchId = payload["new_match_id"];
-        print("✅ Rematch accepted! New match: $newMatchId");
         notifyListeners();
         break;
 
       case "rematch_cancelled":
-        // Rematch was canceled because a player left
         opponentLeft = true;
         rematchRequested = false;
         opponentRematchRequested = false;
-        print("❌ Rematch cancelled! Opponent left");
         notifyListeners();
         break;
 
-      case "pong":
-        // Response to ping
-        break;
-
-      case "error":
-        print("⚠️ Error from server: $payload");
-        break;
-
       default:
-        print("📩 Unknown message: $msg");
+        break;
     }
   }
 
-  // Timer countdown
+  // ==========================================================
+  // ⏱️ Turn Timer
+  // ==========================================================
   void _startTimerIfNeeded() {
+    if (isStartBannerShowing) return;
     if (timeLeft == null || isFinished || _isTimerRunning) return;
 
-    // Save the initial value and start time
     initialTimeLeft = timeLeft;
     turnStartTime = DateTime.now();
     _isTimerRunning = true;
@@ -483,20 +473,18 @@ class CaroController extends ChangeNotifier {
   }
 
   void _updateTimer() {
-    // CRITICAL: Check if disposed or stopped
     if (!_isTimerRunning ||
         isFinished ||
+        isStartBannerShowing ||
         turnStartTime == null ||
         initialTimeLeft == null) {
       _isTimerRunning = false;
       return;
     }
 
-    // Calculate the remaining time based on elapsed time
     final elapsed = DateTime.now().difference(turnStartTime!).inSeconds;
     final remaining = (initialTimeLeft! - elapsed).clamp(0, 999);
 
-    // Update UI
     if (remaining != timeLeft) {
       timeLeft = remaining;
       notifyListeners();
@@ -515,7 +503,7 @@ class CaroController extends ChangeNotifier {
   }
 
   // ==========================================================
-  // ⏸️ Pause & Resume & Reset
+  // ⏸️ Pause & Resume
   // ==========================================================
   void pauseGame() {
     if (isFinished || isPaused) return;
@@ -527,31 +515,24 @@ class CaroController extends ChangeNotifier {
   void resumeGame() {
     if (!isPaused) return;
     isPaused = false;
-    _startTimerIfNeeded();
-    notifyListeners();
-  }
-
-  void togglePause() {
-    if (isFinished) return;
-    if (isPaused) {
-      resumeGame();
-    } else {
-      pauseGame();
+    if (!isStartBannerShowing) {
+      _startTimerIfNeeded();
     }
+    notifyListeners();
   }
 
   void resetGame() {
     _stopTimer();
     isPaused = false;
     initBoard();
-    _startTimerIfNeeded();
     notifyListeners();
   }
 
   // ==========================================================
-  // ✉️ Move & surrender & rematch (Online & Offline)
+  // ♟️ Game Moves & Early Draw Detection
   // ==========================================================
   void sendMove(int x, int y) {
+    if (isStartBannerShowing) return;
     if (isFinished || isPaused) return;
     if (x < 0 || x >= rows || y < 0 || y >= cols) return;
     if (board[x][y].isNotEmpty) return;
@@ -559,14 +540,25 @@ class CaroController extends ChangeNotifier {
     if (isOffline) {
       if (isVsBot && currentTurn != mySymbol) return;
 
+      hintCell = null;
       final symbol = currentTurn;
       board[x][y] = symbol;
+
+      moveHistory.add(CaroMoveRecord(
+        row: x,
+        col: y,
+        symbol: symbol,
+        prevLastRow: lastMoveRow,
+        prevLastCol: lastMoveCol,
+      ));
+
       lastMoveRow = x;
       lastMoveCol = y;
       moveCount++;
       _stopTimer();
       AudioService.instance.playMovePlacement();
 
+      // 1. Win Check
       final winPositions = _checkWinCondition(x, y, symbol);
       if (winPositions != null) {
         isFinished = true;
@@ -576,6 +568,19 @@ class CaroController extends ChangeNotifier {
           myWins++;
           myRatingChange = isVsBot ? 15 : 20;
           myRating = (myRating ?? 1200) + myRatingChange!;
+
+          // Progression unlock logic on winning against Bot
+          if (isVsBot && level != null) {
+            if (level == GameLevel.master) {
+              isMasterBeaten = true;
+            }
+            final nextIdx = level!.index + 1;
+            if (nextIdx < GameLevel.values.length) {
+              final nextLevel = GameLevel.values[nextIdx];
+              LocalStorageService.unlockBotLevel(nextLevel);
+              newlyUnlockedLevel = nextLevel;
+            }
+          }
         } else {
           opponentWins++;
           myRatingChange = isVsBot ? -10 : -15;
@@ -586,6 +591,7 @@ class CaroController extends ChangeNotifier {
         return;
       }
 
+      // 2. Full Board Draw Check
       if (moveCount >= rows * cols) {
         isFinished = true;
         draws++;
@@ -595,15 +601,29 @@ class CaroController extends ChangeNotifier {
         return;
       }
 
-      currentTurn = (symbol == "X" ? "O" : "X");
+      // 3. Early Dead-Position Draw Check
+      final nextTurn = (symbol == "X" ? "O" : "X");
+      if (config.isDeadPosition(board, nextTurn)) {
+        isFinished = true;
+        draws++;
+        drawReason = "No winning line left";
+        myRatingChange = 0;
+        _recordOfflineMatchResult('draw');
+        notifyListeners();
+        return;
+      }
+
+      currentTurn = nextTurn;
       timeLeft = 30;
       initialTimeLeft = 30;
       turnStartTime = DateTime.now();
       notifyListeners();
       _startTimerIfNeeded();
 
+      // Trigger bot turn after 350ms delay
       if (isVsBot && currentTurn == "O" && !isFinished) {
-        Future.delayed(const Duration(milliseconds: 350), () {
+        _cancelBotTimer();
+        _botTimer = Timer(const Duration(milliseconds: 350), () {
           if (!isFinished && currentTurn == "O") {
             _makeBotMove();
           }
@@ -667,159 +687,39 @@ class CaroController extends ChangeNotifier {
   void _makeBotMove() {
     if (isFinished) return;
 
-    // Dynamic difficulty: as the player wins more matches, bot becomes significantly smarter
-    // myWins 0: basic AI
-    // myWins 1-2: strategic AI (forks, blocking open-twos)
-    // myWins 3+: master AI (lookahead, center control, optimal defensive & offensive valuation)
+    _botTurnCount++;
+    final bool isMistake = _botMistakeTurns.contains(_botTurnCount);
 
-    // 1. Instant Win check (streak of 3 for O)
-    for (int r = 0; r < rows; r++) {
-      for (int c = 0; c < cols; c++) {
-        if (board[r][c].isEmpty) {
-          board[r][c] = "O";
-          if (_checkWinCondition(r, c, "O") != null) {
-            board[r][c] = "";
-            _executeBotMove(r, c);
-            return;
-          }
-          board[r][c] = "";
-        }
-      }
-    }
+    final bestMove = BotEngine.findBestMove(
+      board: board,
+      config: config,
+      botSymbol: "O",
+      humanSymbol: "X",
+      isMistakeTurn: isMistake,
+    );
 
-    // 2. Immediate Block check (stop player X from getting streak of 3)
-    for (int r = 0; r < rows; r++) {
-      for (int c = 0; c < cols; c++) {
-        if (board[r][c].isEmpty) {
-          board[r][c] = "X";
-          if (_checkWinCondition(r, c, "X") != null) {
-            board[r][c] = "";
-            _executeBotMove(r, c);
-            return;
-          }
-          board[r][c] = "";
-        }
-      }
-    }
-
-    // 3. For higher win counts (experienced bot), check 2-in-a-row threats & forks
-    int bestScore = -1;
-    Position? bestPos;
-
-    final centerR = rows ~/ 2;
-    final centerC = cols ~/ 2;
-
-    for (int r = 0; r < rows; r++) {
-      for (int c = 0; c < cols; c++) {
-        if (board[r][c].isNotEmpty) continue;
-
-        int score = 0;
-
-        // Position evaluation: center preference
-        final distToCenter = (r - centerR).abs() + (c - centerC).abs();
-        score += (rows - distToCenter) * 2;
-
-        // Check potential lines of length 3 in all directions
-        final directions = [
-          [0, 1],
-          [1, 0],
-          [1, 1],
-          [1, -1],
-        ];
-
-        for (final dir in directions) {
-          final dr = dir[0];
-          final dc = dir[1];
-
-          // Check window of winLen (5) centered around (r, c)
-          for (int step = -(winLen - 1); step <= 0; step++) {
-            int currentO = 0;
-            int currentX = 0;
-            bool validWindow = true;
-
-            for (int k = 0; k < winLen; k++) {
-              final nr = r + (step + k) * dr;
-              final nc = c + (step + k) * dc;
-
-              if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) {
-                validWindow = false;
-                break;
-              }
-
-              if (nr == r && nc == c) {
-                // this is candidate cell
-                continue;
-              }
-
-              if (board[nr][nc] == "O") currentO++;
-              if (board[nr][nc] == "X") currentX++;
-            }
-
-            if (validWindow) {
-              // Bot attack scoring
-              if (currentX == 0) {
-                if (currentO == 4) {
-                  score += 600; // 4 in window + candidate = 5 in a row WIN!
-                } else if (currentO == 3) {
-                  score += 180; // 3 in a row building towards 5
-                } else if (currentO == 2) {
-                  score += 40;
-                } else if (currentO == 1) {
-                  score += 10;
-                } else {
-                  score += 2;
-                }
-              }
-
-              // Player defense scoring (blocks player build-up)
-              if (currentO == 0) {
-                if (currentX == 4) {
-                  score += 550; // Critical block: stop player from getting 5 in a row!
-                } else if (currentX == 3) {
-                  // Block player 3-in-a-row threat
-                  score += (myWins >= 2) ? 180 : 100;
-                } else if (currentX == 2) {
-                  score += (myWins >= 2) ? 50 : 25;
-                } else if (currentX == 1) {
-                  score += (myWins >= 2) ? 15 : 6;
-                } else {
-                  score += 2;
-                }
-              }
-            }
-          }
-
-          // Immediate neighbor bonus
-          for (int d = -1; d <= 1; d += 2) {
-            final nr = r + d * dr;
-            final nc = c + d * dc;
-            if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
-              if (board[nr][nc] == "O") score += (myWins >= 1 ? 12 : 5);
-              if (board[nr][nc] == "X") score += (myWins >= 2 ? 15 : 6);
-            }
-          }
-        }
-
-        if (score > bestScore) {
-          bestScore = score;
-          bestPos = Position(r, c);
-        }
-      }
-    }
-
-    final target = bestPos ?? Position(rows ~/ 2, cols ~/ 2);
-    _executeBotMove(target.x, target.y);
+    _executeBotMove(bestMove.x, bestMove.y);
   }
 
   void _executeBotMove(int x, int y) {
     if (isFinished || board[x][y].isNotEmpty) return;
+
     board[x][y] = "O";
+    moveHistory.add(CaroMoveRecord(
+      row: x,
+      col: y,
+      symbol: "O",
+      prevLastRow: lastMoveRow,
+      prevLastCol: lastMoveCol,
+    ));
+
     lastMoveRow = x;
     lastMoveCol = y;
     moveCount++;
     _stopTimer();
     AudioService.instance.playMovePlacement();
 
+    // 1. Bot Win Check
     final winPositions = _checkWinCondition(x, y, "O");
     if (winPositions != null) {
       isFinished = true;
@@ -833,9 +733,21 @@ class CaroController extends ChangeNotifier {
       return;
     }
 
+    // 2. Full Board Draw Check
     if (moveCount >= rows * cols) {
       isFinished = true;
       draws++;
+      myRatingChange = 0;
+      _recordOfflineMatchResult('draw');
+      notifyListeners();
+      return;
+    }
+
+    // 3. Early Dead-Position Draw Check
+    if (config.isDeadPosition(board, "X")) {
+      isFinished = true;
+      draws++;
+      drawReason = "No winning line left";
       myRatingChange = 0;
       _recordOfflineMatchResult('draw');
       notifyListeners();
@@ -860,21 +772,21 @@ class CaroController extends ChangeNotifier {
       totalMoves: moveCount,
       durationSeconds: 30,
       isVsBot: isVsBot,
+      levelName: level?.displayName,
+      boardRows: rows,
+      boardCols: cols,
     );
   }
 
   // ==========================================================
-  // 💬 Chat methods
+  // 💬 Chat & Online Actions
   // ==========================================================
-
-  /// Opens the chat panel and resets the unread count.
   void openChat() {
     isChatOpen = true;
     unreadMessageCount = 0;
     notifyListeners();
   }
 
-  /// Closes the chat panel.
   void closeChat() {
     isChatOpen = false;
     notifyListeners();
@@ -935,23 +847,19 @@ class CaroController extends ChangeNotifier {
     if (!isConnected) return;
     rematchRequested = true;
     notifyListeners();
-
-    final data = jsonEncode({"type": "rematch", "payload": {}});
-    _service?.send(data);
-    print("🔄 Rematch request sent");
+    _service?.send(jsonEncode({"type": "rematch", "payload": {}}));
   }
 
-  // ==========================================================
-  // 🔌 Disconnect
-  // ==========================================================
   void _handleDisconnect() {
-    _stopTimer(); // Stop the timer when disconnecting
+    _stopTimer();
+    _cancelBotTimer();
     isConnected = false;
     notifyListeners();
   }
 
   void disconnect() {
-    _stopTimer(); // Stop the timer before disconnecting
+    _stopTimer();
+    _cancelBotTimer();
     _service?.disconnect();
     isConnected = false;
     notifyListeners();
@@ -959,7 +867,8 @@ class CaroController extends ChangeNotifier {
 
   @override
   void dispose() {
-    _stopTimer(); // Stop the timer when disposing
+    _stopTimer();
+    _cancelBotTimer();
     _service?.disconnect();
     super.dispose();
   }

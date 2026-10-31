@@ -170,6 +170,9 @@ class _CaroBoardState extends State<CaroBoard>
                         controller.winningLine?.contains(x, y) ?? false;
                     final bool isLastMove =
                         controller.lastMoveRow == x && controller.lastMoveCol == y;
+                    final bool isHint = controller.hintCell != null &&
+                        controller.hintCell!.x == x &&
+                        controller.hintCell!.y == y;
 
                     return CaroCell(
                       x: x,
@@ -177,6 +180,7 @@ class _CaroBoardState extends State<CaroBoard>
                       value: controller.board[x][y],
                       isWinningCell: isWinning,
                       isLastMove: isLastMove,
+                      isHintCell: isHint,
                       cellSize: cellSize,
                       onTap: () {
                         if (!controller.isFinished && !controller.isPaused) {

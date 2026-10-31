@@ -1,17 +1,19 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../game/caro/game_config.dart';
 import '../models/match_history_model.dart';
 import '../models/leaderboard_model.dart';
 import '../models/profile_model.dart';
 import '../models/user_model.dart';
 
-/// Service managing all offline/local game storage (Profile, History, Leaderboard, Stats)
+/// Service managing all offline/local game storage (Profile, History, Leaderboard, Stats, Levels)
 /// using SharedPreferences. No backend or database required.
 class LocalStorageService {
   static const String _keyProfile = 'local_user_profile';
   static const String _keyMatches = 'local_match_history';
   static const String keyIsDarkMode = 'is_dark_mode';
+  static const String keyBotUnlockedLevel = 'bot_unlocked_level';
 
   static SharedPreferences? _prefs;
 
@@ -21,6 +23,31 @@ class LocalStorageService {
   static Future<SharedPreferences> _getPrefs() async {
     _prefs ??= await SharedPreferences.getInstance();
     return _prefs!;
+  }
+
+  /// Get highest unlocked bot level (defaults to Beginner)
+  static Future<GameLevel> getBotUnlockedLevel() async {
+    try {
+      final prefs = await _getPrefs();
+      final index = prefs.getInt(keyBotUnlockedLevel) ?? 0;
+      if (index < 0 || index >= GameLevel.values.length) return GameLevel.beginner;
+      return GameLevel.values[index];
+    } catch (_) {
+      return GameLevel.beginner;
+    }
+  }
+
+  /// Unlocks next bot progression level if newly achieved
+  static Future<bool> unlockBotLevel(GameLevel nextLevel) async {
+    try {
+      final prefs = await _getPrefs();
+      final current = await getBotUnlockedLevel();
+      if (nextLevel.index > current.index) {
+        await prefs.setInt(keyBotUnlockedLevel, nextLevel.index);
+        return true;
+      }
+    } catch (_) {}
+    return false;
   }
 
   /// Get current dark mode preference (defaults to false / Light Mode)
@@ -119,6 +146,9 @@ class LocalStorageService {
     required int totalMoves,
     required int durationSeconds,
     required bool isVsBot,
+    String? levelName,
+    int boardRows = 7,
+    int boardCols = 7,
   }) async {
     final profile = await getOrCreateProfile();
 
@@ -160,15 +190,17 @@ class LocalStorageService {
     final matchId = DateTime.now().millisecondsSinceEpoch;
     final historyItem = MatchHistoryItem(
       matchId: matchId,
-      gameName: isVsBot ? 'Caro (vs Bot)' : 'Caro (2 Players)',
+      gameName: isVsBot
+          ? 'Tic Tac GO (vs Bot${levelName != null ? ' - $levelName' : ''})'
+          : 'Tic Tac GO (2 Players${levelName != null ? ' - $levelName' : ''})',
       status: 'finished',
       result: result,
       opponentUsername: opponentUsername,
       opponentAvatarUrl: opponentAvatarUrl,
       opponentSymbol: opponentSymbol,
       mySymbol: mySymbol,
-      boardRows: 15,
-      boardCols: 19,
+      boardRows: boardRows,
+      boardCols: boardCols,
       totalMoves: totalMoves,
       createdAt: DateTime.now().subtract(Duration(seconds: durationSeconds)),
       startedAt: DateTime.now().subtract(Duration(seconds: durationSeconds)),
