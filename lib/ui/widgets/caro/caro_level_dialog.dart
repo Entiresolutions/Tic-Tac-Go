@@ -119,7 +119,7 @@ class _CaroLevelSelectDialogState extends State<CaroLevelSelectDialog> {
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       child: Center(
         child: Container(
           constraints: const BoxConstraints(maxWidth: 420, maxHeight: 680),
@@ -374,10 +374,11 @@ class _CaroLevelSelectDialogState extends State<CaroLevelSelectDialog> {
                     ],
                   ),
                   const SizedBox(height: 2),
-                  Row(
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
                     children: [
                       _buildPill('${level.rows}×${level.cols} Grid', isLocked),
-                      const SizedBox(width: 6),
                       _buildPill('${level.winLen} in a row', isLocked),
                     ],
                   ),

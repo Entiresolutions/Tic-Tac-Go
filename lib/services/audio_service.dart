@@ -17,7 +17,7 @@ class AudioService with WidgetsBindingObserver {
   static const String assetButton = 'sound/button.mp3';
   static const String assetTic = 'sound/tic.mp3';
   static const String assetLaser = 'sound/laser.mp3';
-  static const String assetBgm = 'sound/tic-tac-go-game Soundtrack.mp3';
+  static const String assetBgm = 'sound/tic_tac_toe_jazz loop.mp3';
 
   // Dedicated players to prevent overlap and clipping
   final AudioPlayer _bgmPlayer = AudioPlayer();

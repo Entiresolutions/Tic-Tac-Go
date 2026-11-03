@@ -48,7 +48,7 @@ class _CaroTutorialDialogState extends State<CaroTutorialDialog> {
       stepNumber: '1',
       title: 'Connect Winning Streaks',
       description:
-          'Place your marks to create an unbroken line horizontally, vertically, or diagonally. Win streaks dynamically scale from 3 to 7 based on your chosen level!',
+          'Place your marks to create an unbroken line horizontally, vertically, or diagonally. Win streaks dynamically scale from 3 to 8 based on your chosen level!',
       icon: Icons.emoji_events_rounded,
       iconColor: AppColors.winHighlight,
       badgeText: 'WIN CONDITION',
@@ -106,15 +106,20 @@ class _CaroTutorialDialogState extends State<CaroTutorialDialog> {
   @override
   Widget build(BuildContext context) {
     final isLastPage = _currentPage == _slides.length - 1;
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final double pageViewHeight = screenHeight < 640 ? 280.0 : 310.0;
 
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
       shape: const RoundedRectangleBorder(side: BorderSide.none),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       child: Center(
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 390),
+          constraints: BoxConstraints(
+            maxWidth: 390,
+            maxHeight: screenHeight * 0.92,
+          ),
           decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(28),
@@ -136,7 +141,7 @@ class _CaroTutorialDialogState extends State<CaroTutorialDialog> {
             children: [
               // Header with Title & Skip Button
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 18, 14, 8),
+                padding: const EdgeInsets.fromLTRB(18, 16, 12, 6),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -184,7 +189,7 @@ class _CaroTutorialDialogState extends State<CaroTutorialDialog> {
 
               // PageView of Tutorial Slides
               SizedBox(
-                height: 310,
+                height: pageViewHeight,
                 child: PageView.builder(
                   controller: _pageController,
                   itemCount: _slides.length,
@@ -200,83 +205,90 @@ class _CaroTutorialDialogState extends State<CaroTutorialDialog> {
 
               // Bottom Control Bar (Indicator + Navigation Buttons)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Slide Indicators
-                    Row(
-                      children: List.generate(
-                        _slides.length,
-                        (i) => AnimatedContainer(
-                          duration: const Duration(milliseconds: 250),
-                          margin: const EdgeInsets.only(right: 6),
-                          width: _currentPage == i ? 22 : 7,
-                          height: 7,
-                          decoration: BoxDecoration(
-                            color: _currentPage == i
-                                ? AppColors.primary
-                                : AppColors.borderDark,
-                            borderRadius: BorderRadius.circular(4),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.center,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Slide Indicators
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: List.generate(
+                          _slides.length,
+                          (i) => AnimatedContainer(
+                            duration: const Duration(milliseconds: 250),
+                            margin: const EdgeInsets.only(right: 6),
+                            width: _currentPage == i ? 22 : 7,
+                            height: 7,
+                            decoration: BoxDecoration(
+                              color: _currentPage == i
+                                  ? AppColors.primary
+                                  : AppColors.borderDark,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                      const SizedBox(width: 16),
 
-                    // Actions
-                    Row(
-                      children: [
-                        if (_currentPage > 0) ...[
-                          BouncingGameButton(
-                            height: 38,
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            backgroundColor: AppColors.surfaceSecondary,
-                            bevelColor: AppColors.borderDark,
-                            borderColor: AppColors.border,
-                            onPressed: _onBack,
-                            child: Text(
-                              'Back',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        BouncingGameButton(
-                          height: 38,
-                          padding: const EdgeInsets.symmetric(horizontal: 18),
-                          backgroundColor: AppColors.primary,
-                          bevelColor: AppColors.primaryDark,
-                          borderColor: AppColors.primaryDark,
-                          onPressed: _onNext,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                isLastPage ? "Let's Play!" : 'Next',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.textWhite,
+                      // Actions
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_currentPage > 0) ...[
+                            BouncingGameButton(
+                              height: 36,
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              backgroundColor: AppColors.surfaceSecondary,
+                              bevelColor: AppColors.borderDark,
+                              borderColor: AppColors.border,
+                              onPressed: _onBack,
+                              child: Text(
+                                'Back',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimary,
                                 ),
                               ),
-                              const SizedBox(width: 4),
-                              Icon(
-                                isLastPage
-                                    ? Icons.sports_esports_rounded
-                                    : Icons.arrow_forward_rounded,
-                                size: 15,
-                                color: AppColors.textWhite,
-                              ),
-                            ],
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          BouncingGameButton(
+                            height: 36,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            backgroundColor: AppColors.primary,
+                            bevelColor: AppColors.primaryDark,
+                            borderColor: AppColors.primaryDark,
+                            onPressed: _onNext,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  isLastPage ? "Let's Play!" : 'Next',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.textWhite,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(
+                                  isLastPage
+                                      ? Icons.sports_esports_rounded
+                                      : Icons.arrow_forward_rounded,
+                                  size: 15,
+                                  color: AppColors.textWhite,
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -287,14 +299,16 @@ class _CaroTutorialDialogState extends State<CaroTutorialDialog> {
   }
 
   Widget _buildSlideContent(_TutorialSlideData slide, int index) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+    return SingleChildScrollView(
+      physics: const ClampingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Visual Illustration
+          // Visual Illustration (Scaled down gracefully on narrow screens)
           _buildVisualIllustration(index),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
 
           // Badge tag
           Container(
@@ -320,7 +334,7 @@ class _CaroTutorialDialogState extends State<CaroTutorialDialog> {
           Text(
             slide.title,
             style: TextStyle(
-              fontSize: 18,
+              fontSize: 17,
               fontWeight: FontWeight.w900,
               color: AppColors.textPrimary,
               letterSpacing: 0.3,
@@ -328,16 +342,16 @@ class _CaroTutorialDialogState extends State<CaroTutorialDialog> {
             textAlign: TextAlign.center,
           ),
 
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
 
           // Slide Description
           Text(
             slide.description,
             style: TextStyle(
-              fontSize: 12.5,
+              fontSize: 12,
               fontWeight: FontWeight.w500,
               color: AppColors.textSecondary,
-              height: 1.4,
+              height: 1.35,
             ),
             textAlign: TextAlign.center,
           ),
@@ -350,176 +364,186 @@ class _CaroTutorialDialogState extends State<CaroTutorialDialog> {
   Widget _buildVisualIllustration(int index) {
     switch (index) {
       case 0:
-        // Mini diagram of 5 marks in a row with glowing line
-        return Container(
-          width: 220,
-          height: 52,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceSecondary,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: List.generate(
-                  5,
-                  (i) => Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: AppColors.winHighlight.withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: AppColors.winHighlight,
-                        width: 1.5,
+        // Mini diagram of marks in a row with glowing line
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceSecondary,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List.generate(
+                    5,
+                    (i) => Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: AppColors.winHighlight.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: AppColors.winHighlight,
+                          width: 1.5,
+                        ),
                       ),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        'X',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.xPrimary,
+                      child: const Center(
+                        child: Text(
+                          'X',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.xPrimary,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              Positioned(
-                left: 6,
-                right: 6,
-                child: Container(
-                  height: 3.5,
-                  decoration: BoxDecoration(
-                    color: AppColors.winHighlight,
-                    borderRadius: BorderRadius.circular(2),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: AppColors.glowWin,
-                        blurRadius: 8,
-                        spreadRadius: 1,
-                      ),
-                    ],
+                Positioned(
+                  left: 6,
+                  right: 6,
+                  child: Container(
+                    height: 3.5,
+                    decoration: BoxDecoration(
+                      color: AppColors.winHighlight,
+                      borderRadius: BorderRadius.circular(2),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: AppColors.glowWin,
+                          blurRadius: 8,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
 
       case 1:
-        // VS chips illustration
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.xPrimary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.xPrimary, width: 1.5),
-              ),
-              child: const Row(
-                children: [
-                  Text(
-                    'X',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      color: AppColors.xPrimary,
+        // VS chips illustration - wrapped in FittedBox so it NEVER overflows on small phones
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.xPrimary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.xPrimary, width: 1.5),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'X',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.xPrimary,
+                      ),
                     ),
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    'You (Blue)',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.xPrimary,
+                    SizedBox(width: 6),
+                    Text(
+                      'You (Blue)',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.xPrimary,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Text(
-                'VS',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
-                  color: AppColors.textMuted,
+                  ],
                 ),
               ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.oPrimary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.oPrimary, width: 1.5),
-              ),
-              child: const Row(
-                children: [
-                  Text(
-                    'O',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      color: AppColors.oPrimary,
-                    ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
+                  'VS',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.textMuted,
                   ),
-                  SizedBox(width: 8),
-                  Text(
-                    'Opponent (Red)',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.oPrimary,
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ],
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.oPrimary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.oPrimary, width: 1.5),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'O',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.oPrimary,
+                      ),
+                    ),
+                    SizedBox(width: 6),
+                    Text(
+                      'Opponent (Red)',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.oPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         );
 
       case 2:
       default:
         // 30s countdown clock illustration
-        return Container(
-          width: 140,
-          height: 52,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: AppColors.timerNormal.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.timerNormal, width: 1.5),
-          ),
-          child: const Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.hourglass_top_rounded,
-                color: AppColors.timerNormal,
-                size: 20,
-              ),
-              SizedBox(width: 8),
-              Text(
-                '30s Clock',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.5,
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.timerNormal.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.timerNormal, width: 1.5),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.hourglass_top_rounded,
                   color: AppColors.timerNormal,
+                  size: 20,
                 ),
-              ),
-            ],
+                SizedBox(width: 8),
+                Text(
+                  '30s Clock',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
+                    color: AppColors.timerNormal,
+                  ),
+                ),
+              ],
+            ),
           ),
         );
     }
