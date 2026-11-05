@@ -89,11 +89,11 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.entiresolution" "\0"
+            VALUE "CompanyName", "com.entiresolutions" "\0"
             VALUE "FileDescription", "Tic Tac Go" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "tic_tac_go" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.entiresolution. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 com.entiresolutions. All rights reserved." "\0"
             VALUE "OriginalFilename", "tic_tac_go.exe" "\0"
             VALUE "ProductName", "Tic Tac Go" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"

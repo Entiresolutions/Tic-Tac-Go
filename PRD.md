@@ -1,7 +1,7 @@
 # Product Requirements Document (PRD) - Tic Tac GO
 
 ## 1. Executive Summary
-**Tic Tac GO** (powered by Entire Solution) is a modern, offline-first strategy board game built in Flutter. Parameterized around a flexible strategic engine (`GameConfig`) spanning grids from $3 \times 3$ to $7 \times 7$ and win streaks from 3 to 7, the application is completely self-contained and operates 100% offline without remote servers or cloud database dependencies. All player profiles, ratings, match histories, unlocked ranks, and audio preferences persist locally on the device using `SharedPreferences`.
+**Tic Tac GO** (Application ID: `com.entiresolutions.tictacgo`, powered by Entire Solution) is a modern, offline-first strategy board game built in Flutter. Parameterized around a flexible strategic engine (`GameConfig`) spanning grids from $3 \times 3$ to $8 \times 8$ and win streaks from 3 to 8, the application is completely self-contained and operates 100% offline without remote servers or cloud database dependencies. All player profiles, ratings, match histories, unlocked ranks, and audio preferences persist locally on the device using `SharedPreferences`.
 
 The game offers two primary gameplay modes:
 1. **Play with Bot**: Single-player mode with locked rank progression across 6 levels, from Beginner up to flawless Master AI.

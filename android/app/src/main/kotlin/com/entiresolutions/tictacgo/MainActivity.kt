@@ -1,4 +1,4 @@
-package com.entiresolution.tictacgo
+package com.entiresolutions.tictacgo
 
 import io.flutter.embedding.android.FlutterActivity
 
