@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'package:tic_tac_go/core/theme/app_colors.dart';
@@ -7,10 +8,14 @@ import 'package:tic_tac_go/core/theme/theme_provider.dart';
 import 'package:tic_tac_go/services/audio_service.dart';
 import 'package:tic_tac_go/services/haptic_service.dart';
 import 'package:tic_tac_go/services/local_storage_service.dart';
-import 'package:tic_tac_go/ui/screens/caro/caro_splash_screen.dart';
+import 'package:tic_tac_go/ui/screens/intro_video_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
   try {
     await dotenv.load(fileName: ".env");
   } catch (_) {
@@ -49,7 +54,7 @@ class CaroApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
-      home: const CaroSplashScreen(),
+      home: const IntroVideoScreen(),
     );
   }
 }

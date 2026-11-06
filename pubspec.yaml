@@ -26,6 +26,7 @@ dependencies:
   flutter_svg: ^2.0.10+1
   flutter_screenutil: ^5.9.0
   vibration: ^2.0.5
+  video_player: ^2.9.2
 
 dev_dependencies:
   flutter_test:
@@ -49,3 +50,4 @@ flutter:
     - assets/sound/
     - assets/fonts/
     - assets/tic-tac-go-logo.png
+    - assets/splah_before.mp4
