@@ -1,5 +1,5 @@
 # Privacy Policy
-Tic Tac Go | Effective November 6, 2026 | Last updated November 6, 2026
+Tic Tac Go | Effective November 6, 2026 | Last updated November 26, 2026
 
 ## 01 Overview
 Entire Solutions develops and publishes Tic Tac Go, an offline-first strategic board game available on Android and iOS mobile platforms. This Privacy Policy explains how information is handled when you download, install, and play Tic Tac Go.
@@ -15,7 +15,7 @@ Tic Tac Go stores game configuration, statistics, and progress locally on your d
 - Match records and history: Match results (wins, losses, and draws), game duration, total move count, board dimensions (ranging from 3x3 to 8x8 grids), win streak requirements (ranging from 3 to 8 in a row), timestamps of completed matches, and player mark assignments (X or O).
 - Gameplay progression: Highest unlocked difficulty level against the computer bot (ranging from Beginner through Master).
 - Audio and feedback preferences: Sound effects toggle (enabled or disabled), background music toggle (enabled or disabled), volume level percentages, and haptic vibration feedback preferences.
-- Visual and guidance settings: Dark mode theme preference and tutorial completion flags.
+- Visual and guidance settings: Dark mode theme preference, tutorial completion flags, and first-match completion flag (used to skip pre-game advertisements on your first match).
 
 All local data remains strictly within the private application directory allocated by Android or iOS and is deleted when the application is uninstalled or when you clear application storage in your device settings.
 
@@ -26,10 +26,10 @@ The categories of information processed by third-party advertising partners incl
 
 - Unique and advertising identifiers: Google Advertising ID (GAID / AAID) on Android devices, Identifier for Advertisers (IDFA) on iOS devices (subject to user permission), and software developer kit (SDK) instance identifiers.
 - Device and network data: Internet Protocol (IP) address (used to determine general, non-precise geographic location such as country or city), device make, device model, operating system version, mobile network carrier, language settings, and screen resolution.
-- Ad interaction and performance data: Information regarding ad views, impressions, clicks, video completions, and user interactions with banner, interstitial, and rewarded advertisements.
+- Ad interaction and performance data: Information regarding ad views, impressions, clicks, video completions, and user interactions with interstitial and rewarded interstitial advertisements.
 - Diagnostic and telemetry metrics: Ad load requests, error logs, latency reports, and performance analytics necessary to diagnose delivery failures and prevent fraudulent impressions.
 
-Ad types utilized in Tic Tac Go include banner advertisements, interstitial advertisements between gameplay sessions, and optional rewarded video advertisements that players may choose to view for gameplay perks.
+Ad types utilized in Tic Tac Go include interstitial advertisements displayed before gameplay sessions begin after a player's first match (when connected to the internet) and optional rewarded interstitial advertisements that players may choose to view to unlock in-game Hint and Undo actions.
 
 Entire Solutions does not operate an external server to receive, process, or store these advertising identifiers. All advertising data collection is managed directly by Google AdMob in accordance with Google privacy standards.
 
@@ -49,7 +49,7 @@ You have multiple options to manage how advertisements are served and how your a
 - In-app consent controls: In regions governed by data protection laws requiring explicit consent (such as the European Economic Area, the United Kingdom, and Switzerland under the General Data Protection Regulation and ePrivacy Directive), a consent management platform powered by Google User Messaging Platform (UMP) is displayed upon launch. You can choose to consent to personalized advertising, allow only non-personalized advertising, or decline non-essential cookies and identifiers.
 - Android system settings: You can reset or delete your advertising identifier at any time by navigating to Settings > Google > Ads on your Android device and selecting either Reset advertising ID or Delete advertising ID.
 - iOS system settings: On iOS devices, you can manage tracking permissions by going to Settings > Privacy & Security > Tracking and toggling off Allow Apps to Request to Track, or going to Settings > Privacy & Security > Apple Advertising to disable Personalized Ads.
-- Offline play: Because Tic Tac Go is fully functional offline, you can play without any advertising data collection by placing your device in Airplane Mode or disabling internet connectivity.
+- Offline play: Core board gameplay in Tic Tac Go is fully functional offline, allowing you to play matches without advertising data collection by placing your device in Airplane Mode or disabling internet connectivity. Optional rewarded Hint and Undo actions require an active internet connection to load and display a rewarded interstitial advertisement.
 
 ## 06 Device permissions
 Tic Tac Go requests only the minimum device permissions necessary for gameplay and advertising functionality. The permissions utilized on Android include:

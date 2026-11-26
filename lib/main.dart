@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:tic_tac_go/core/theme/app_colors.dart';
 import 'package:tic_tac_go/core/theme/app_theme.dart';
 import 'package:tic_tac_go/core/theme/theme_provider.dart';
+import 'package:tic_tac_go/services/ad_service.dart';
 import 'package:tic_tac_go/services/audio_service.dart';
 import 'package:tic_tac_go/services/haptic_service.dart';
 import 'package:tic_tac_go/services/local_storage_service.dart';
@@ -34,6 +35,12 @@ Future<void> main() async {
       child: const CaroApp(),
     ),
   );
+
+  // Initialize AdMob after the first frame so startup never blocks or runs
+  // before the Android Activity and Flutter engine are attached.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    AdService.instance.init();
+  });
 }
 
 class CaroApp extends StatelessWidget {

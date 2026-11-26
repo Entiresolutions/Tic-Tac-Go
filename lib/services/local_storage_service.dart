@@ -14,6 +14,7 @@ class LocalStorageService {
   static const String _keyMatches = 'local_match_history';
   static const String keyIsDarkMode = 'is_dark_mode';
   static const String keyBotUnlockedLevel = 'bot_unlocked_level';
+  static const String keyHasPlayedFirstMatch = 'has_played_first_match';
 
   static SharedPreferences? _prefs;
 
@@ -65,6 +66,24 @@ class LocalStorageService {
     try {
       final prefs = await _getPrefs();
       await prefs.setBool(keyIsDarkMode, isDark);
+    } catch (_) {}
+  }
+
+  /// Whether the user has already started at least one match on this device
+  static Future<bool> hasPlayedFirstMatch() async {
+    try {
+      final prefs = await _getPrefs();
+      return prefs.getBool(keyHasPlayedFirstMatch) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Marks that the user has played their first match
+  static Future<void> markFirstMatchPlayed() async {
+    try {
+      final prefs = await _getPrefs();
+      await prefs.setBool(keyHasPlayedFirstMatch, true);
     } catch (_) {}
   }
 

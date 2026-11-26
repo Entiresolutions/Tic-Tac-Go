@@ -4,6 +4,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../models/user_model.dart';
 import '../../../../game/caro/caro_controller.dart';
 import '../../../../game/caro/game_config.dart';
+import '../../../../services/ad_service.dart';
 import '../../../../services/audio_service.dart';
 import '../../../../services/haptic_service.dart';
 import '../../../../services/local_storage_service.dart';
@@ -49,6 +50,8 @@ class _CaroHomeScreenState extends State<CaroHomeScreen>
     );
     _checkLoginAndLoadData();
     AudioService.instance.startBgm();
+    AdService.instance.loadInterstitialAd();
+    AdService.instance.loadRewardedInterstitialAd();
   }
 
   @override
@@ -102,7 +105,7 @@ class _CaroHomeScreenState extends State<CaroHomeScreen>
     );
   }
 
-  void _launchMatch(GameLevel level, {required bool isVsBot}) {
+  Future<void> _launchMatch(GameLevel level, {required bool isVsBot}) async {
     final user = _currentUser ??
         UserModel(
           id: 1,
@@ -111,23 +114,51 @@ class _CaroHomeScreenState extends State<CaroHomeScreen>
           rating: 1200,
         );
 
-    final matchId = DateTime.now().millisecondsSinceEpoch;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ChangeNotifierProvider(
-          create: (_) => CaroController(
-            level: level,
-            matchId: matchId,
-            isOffline: true,
-            isVsBot: isVsBot,
-            initialMyRating: user.rating ?? 1200,
-            initialOpponentRating: isVsBot ? 1400 : 1200,
+    void openMatchScreen() {
+      if (!mounted) return;
+      final matchId = DateTime.now().millisecondsSinceEpoch;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChangeNotifierProvider(
+            create: (_) => CaroController(
+              level: level,
+              matchId: matchId,
+              isOffline: true,
+              isVsBot: isVsBot,
+              initialMyRating: user.rating ?? 1200,
+              initialOpponentRating: isVsBot ? 1400 : 1200,
+            ),
+            child: const CaroScreen(),
           ),
-          child: const CaroScreen(),
         ),
-      ),
-    ).then((_) => _checkLoginAndLoadData());
+      ).then((_) {
+        _checkLoginAndLoadData();
+        AdService.instance.loadInterstitialAd();
+      });
+    }
+
+    final bool hasPlayedBefore =
+        await LocalStorageService.hasPlayedFirstMatch();
+    if (!hasPlayedBefore) {
+      await LocalStorageService.markFirstMatchPlayed();
+      AdService.instance.loadInterstitialAd();
+      openMatchScreen();
+      return;
+    }
+
+    if (AdService.instance.isInterstitialAdReady) {
+      await AudioService.instance.pauseBgm();
+      await AdService.instance.showInterstitialAd(
+        onAdClosed: () {
+          AudioService.instance.resumeBgm();
+          openMatchScreen();
+        },
+      );
+    } else {
+      AdService.instance.loadInterstitialAd();
+      openMatchScreen();
+    }
   }
 
   @override

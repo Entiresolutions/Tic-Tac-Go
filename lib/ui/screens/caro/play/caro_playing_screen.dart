@@ -5,6 +5,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../game/caro/caro_controller.dart';
 import '../../../../game/caro/caro_board.dart';
 import '../../../../game/caro/game_config.dart';
+import '../../../../services/ad_service.dart';
 import '../../../../services/audio_service.dart';
 import '../../../../services/haptic_service.dart';
 import '../../../widgets/bouncing_game_button.dart';
@@ -30,6 +31,7 @@ class _CaroScreenState extends State<CaroScreen> {
   @override
   void initState() {
     super.initState();
+    AdService.instance.loadRewardedInterstitialAd();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _controller = context.read<CaroController>();
       _controller!.connectToServer();
@@ -298,6 +300,64 @@ class _CaroScreenState extends State<CaroScreen> {
     );
   }
 
+  void _showAdNotReadySnackBar() {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Ad not ready. Please check your internet connection.',
+          style: TextStyle(color: AppColors.textPrimary),
+        ),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: AppColors.surface,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  Future<void> _handleRewardedAction(
+    CaroController controller,
+    VoidCallback action,
+  ) async {
+    HapticService.instance.lightImpact();
+    AudioService.instance.playButtonClick();
+
+    if (!AdService.instance.isAdReady) {
+      AdService.instance.loadRewardedInterstitialAd();
+      _showAdNotReadySnackBar();
+      return;
+    }
+
+    final bool wasPaused = controller.isPaused;
+    if (!wasPaused) {
+      controller.pauseGame();
+    }
+    await AudioService.instance.pauseBgm();
+
+    bool rewardEarned = false;
+    await AdService.instance.showRewardedInterstitialAd(
+      onRewardEarned: () {
+        rewardEarned = true;
+      },
+      onAdClosed: () {
+        if (!mounted) return;
+        if (!wasPaused) {
+          controller.resumeGame();
+        }
+        AudioService.instance.resumeBgm();
+        if (rewardEarned) {
+          action();
+        }
+      },
+      onAdNotReady: () {
+        if (!mounted) return;
+        _showAdNotReadySnackBar();
+      },
+    );
+  }
+
   Widget _buildGameActionButtons(CaroController controller) {
     final bool isBotThinking = controller.isVsBot && controller.currentTurn == "O";
     final bool canHint = !controller.isFinished &&
@@ -327,11 +387,7 @@ class _CaroScreenState extends State<CaroScreen> {
                 ? AppColors.winHighlight.withValues(alpha: 0.8)
                 : AppColors.border,
             onPressed: canHint
-                ? () {
-                    HapticService.instance.lightImpact();
-                    AudioService.instance.playButtonClick();
-                    controller.requestHint();
-                  }
+                ? () => _handleRewardedAction(controller, controller.requestHint)
                 : () {},
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -370,11 +426,7 @@ class _CaroScreenState extends State<CaroScreen> {
                 ? AppColors.primary.withValues(alpha: 0.8)
                 : AppColors.border,
             onPressed: canUndo
-                ? () {
-                    HapticService.instance.lightImpact();
-                    AudioService.instance.playButtonClick();
-                    controller.undoMove();
-                  }
+                ? () => _handleRewardedAction(controller, controller.undoMove)
                 : () {},
             child: Row(
               mainAxisSize: MainAxisSize.min,

@@ -27,6 +27,7 @@ dependencies:
   flutter_screenutil: ^5.9.0
   vibration: ^2.0.5
   video_player: ^2.9.2
+  google_mobile_ads: ^9.2.0
 
 dev_dependencies:
   flutter_test:
